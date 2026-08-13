@@ -19,7 +19,8 @@
     "bench:sweep": "node bench/sweep.js",
     "chaos": "node bench/chaos.js",
     "continuity": "node agents/continuity.js",
-    "mcp": "node agents/mcp.js"
+    "mcp": "node agents/mcp.js",
+    "rotate": "node scripts/rotate-credentials.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",

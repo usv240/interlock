@@ -1,9 +1,15 @@
 # Secrets — never commit
-.env
-.env.local
-.env*.local
+#
+# `.env*` is deliberately broad. An earlier version used `.env` + `.env*.local`,
+# which looked thorough and silently failed to match `.env.local.bak` — a file
+# the rotation script creates, containing the password being rotated away from.
+# Enumerate-the-good-cases is the wrong shape for a secrets rule; the only safe
+# default is to exclude everything and re-admit the template explicitly.
+.env*
+!.env.example
 *.pem
 *.key
+*.p12
 credentials.json
 
 # Dependencies
