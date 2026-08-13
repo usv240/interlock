@@ -19,6 +19,18 @@
  * Reporting individual failed message IDs means one poisonous commit does not
  * force the whole batch to be redelivered. After three attempts a message goes
  * to the dead-letter queue rather than looping forever.
+ *
+ * CONCURRENCY CAP — LEARNED THE HARD WAY
+ * The event-source mapping is configured with MaximumConcurrency=2.
+ *
+ * Without it, SQS scales pollers aggressively by default. On this account —
+ * capped at 10 concurrent executions across every function — the worker
+ * consumed the entire budget retrying, and the public API was throttled out of
+ * its own service. Measured over twenty minutes: 15 API throttles and 55 worker
+ * throttles, with the API pinned at exactly 10 concurrent executions.
+ *
+ * The asynchronous path exists so callers do not wait. Letting it starve the
+ * synchronous path inverts the whole point of separating them.
  */
 import { processCommit } from "../agents/interlock.js";
 import { Usage } from "../agents/bedrock.js";

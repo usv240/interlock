@@ -109,18 +109,24 @@ export default function LiveDemo() {
    * throttle is transient and retrying is the correct response, so the reader
    * should never have to know it happened.
    *
-   * Our own rate limit is a 429 too, but it arrives with a JSON body; a
-   * platform throttle does not. That difference is how we tell them apart —
-   * retrying against a real quota breach would be rude.
+   * Our own rate limit is a 429 too, and retrying past a deliberate refusal
+   * would be rude — so the two must be told apart.
+   *
+   * Not by "does it have a JSON body": a Lambda function URL answers a throttle
+   * with {"Message":"Rate Exceeded."}, which is JSON as well. The reliable
+   * signal is the shape — our refusals carry an `error` field, AWS's carries
+   * `Message`.
    */
   async function fetchWithRetry(url: string, init: RequestInit, attempts = 3) {
     for (let i = 0; i < attempts; i++) {
       const res = await fetch(url, init);
       if (res.status !== 429) return res;
 
-      const clone = res.clone();
-      const body = await clone.text().catch(() => "");
-      const isOurQuota = body.trim().startsWith("{");
+      const parsed = await res
+        .clone()
+        .json()
+        .catch(() => null);
+      const isOurQuota = !!parsed && typeof parsed === "object" && "error" in parsed;
       if (isOurQuota || i === attempts - 1) return res;
 
       setThrottled(true);
@@ -147,12 +153,12 @@ export default function LiveDemo() {
       });
 
       if (res.status === 429) {
-        const body = await res.text().catch(() => "");
-        const parsed = body.trim().startsWith("{") ? JSON.parse(body) : null;
+        const parsed = await res.json().catch(() => null);
+        const ours = !!parsed && typeof parsed === "object" && "error" in parsed;
         setError({
-          message: parsed?.error ?? "Too many people are running this at once.",
+          message: ours ? parsed.error : "Too many people are running this at once.",
           hint:
-            parsed?.hint ??
+            (ours ? parsed.hint : null) ??
             "This account is capped at 10 concurrent Lambda executions. Give it a few seconds and try again — or clone the repo and run it without limits.",
         });
         return;

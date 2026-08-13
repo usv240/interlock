@@ -457,7 +457,14 @@ async function bufferedHandler(event) {
     if (path === "/v1/keys" && method === "POST") {
       // Rate limited by IP rather than by key: this is the endpoint you use
       // when you do not yet have one.
-      const gate = await reserveQuota(`keys:${hash}`, { callLimit: 5, usdLimit: 999 });
+      //
+      // Issuance is cheap — a row and a hash, no inference — so the limit only
+      // needs to stop bulk tenant creation, not to ration. It was 5, which a
+      // reader could exhaust by retyping a name and a shared office IP could
+      // exhaust for everyone in it. The cost of being slightly too generous
+      // here is a few unused rows; the cost of being too tight is someone
+      // deciding the service is broken.
+      const gate = await reserveQuota(`keys:${hash}`, { callLimit: 25, usdLimit: 999 });
       if (!gate.allowed) {
         return json(429, {
           ok: false,

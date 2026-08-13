@@ -110,7 +110,15 @@ export const VERIFIED = [
   { claim: "Isolation", value: "serializable", how: "SHOW default_transaction_isolation" },
   { claim: "Regions", value: "3 (us-east-1, us-east-2, us-west-2)", how: "SHOW REGIONS FROM DATABASE" },
   { claim: "Survival goal", value: "region", how: "SHOW DATABASES" },
-  { claim: "Time-travel reach", value: "24h on a real table", how: "npm run continuity" },
+  // Reported as a range on purpose. The probe walks backwards until a read
+  // fails, so the answer moves with the garbage-collection window and how
+  // recently the table was rewritten — 24h on a quiet table, 1h on a busy one.
+  // Quoting the flattering number would misrepresent what a reader would see.
+  {
+    claim: "Time-travel reach",
+    value: "1–24h, bounded by the GC window",
+    how: "npm run continuity",
+  },
   { claim: "Embedding dimensions", value: "1024 (Titan V2)", how: "live Bedrock invocation" },
   { claim: "Lost updates", value: "0 across every benchmark mode", how: "counter arithmetic" },
   { claim: "Exactly-once adjudication", value: "held under 12 kill waves", how: "npm run chaos" },
