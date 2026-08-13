@@ -1,5 +1,7 @@
 import Nav from "@/components/Nav";
 import Benchmark from "@/components/Benchmark";
+import Crossover from "@/components/Crossover";
+import Verified from "@/components/Verified";
 import InfoButton from "@/components/InfoButton";
 import { Card, Pill, Section, SectionHead } from "@/components/ui";
 import { CITATIONS, REPO_URL, STEPS, WHY_CRDB } from "@/lib/content";
@@ -17,10 +19,14 @@ export default function Page() {
         <Section id="benchmark">
           <SectionHead
             eyebrow="Benchmark"
-            title="The numbers this is judged on"
-            lede="Every figure below carries its provenance. Published means somebody else measured it and we cite them. Target means we have not measured it yet and we say so."
+            title="Where this pays, and where it doesn't"
+            lede="Every figure carries its provenance. Published means somebody else measured it and we cite them. Measured means our harness produced it on a live cluster, and you can re-run it."
           />
           <Benchmark />
+          <div className="mt-4">
+            <Crossover />
+          </div>
+          <Verified />
         </Section>
         <Architecture />
         <ChaosDrill />

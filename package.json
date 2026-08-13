@@ -20,7 +20,8 @@
     "chaos": "node bench/chaos.js",
     "continuity": "node agents/continuity.js",
     "mcp": "node agents/mcp.js",
-    "rotate": "node scripts/rotate-credentials.js"
+    "rotate": "node scripts/rotate-credentials.js",
+    "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
