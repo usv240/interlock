@@ -14,6 +14,7 @@ import { build } from "esbuild";
 import { mkdirSync, statSync } from "node:fs";
 
 mkdirSync("api/dist", { recursive: true });
+mkdirSync("api/dist-worker", { recursive: true });
 
 await build({
   entryPoints: ["api/handler.js"],
@@ -38,5 +39,25 @@ await build({
   logLevel: "warning",
 });
 
-const kb = (statSync("api/dist/index.mjs").size / 1024).toFixed(1);
-console.log(`bundled api/dist/index.mjs (${kb} KB)`);
+const BANNER = [
+  "import { createRequire as __interlockRequire } from 'module';",
+  "const require = __interlockRequire(import.meta.url);",
+].join("\n");
+
+// The SQS worker is a separate function with its own concurrency, timeout and
+// failure semantics, so it gets its own artifact rather than sharing the API's.
+await build({
+  entryPoints: ["api/worker.js"],
+  bundle: true,
+  platform: "node",
+  target: "node22",
+  format: "esm",
+  outfile: "api/dist-worker/index.mjs",
+  external: ["@aws-sdk/*"],
+  banner: { js: BANNER },
+  logLevel: "warning",
+});
+
+const kb = (p) => (statSync(p).size / 1024).toFixed(1);
+console.log(`bundled api/dist/index.mjs (${kb("api/dist/index.mjs")} KB)`);
+console.log(`bundled api/dist-worker/index.mjs (${kb("api/dist-worker/index.mjs")} KB)`);

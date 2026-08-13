@@ -392,7 +392,11 @@ function Architecture() {
     },
     {
       tool: "AWS Lambda",
-      use: "The public API. Declares intents, commits, adjudicates, and enforces the spend ceiling. This is what the button above calls.",
+      use: "Two functions. The public API declares intents, commits and streams the demo. A separate SQS worker adjudicates off the queue with partial-batch failure reporting and its own concurrency.",
+    },
+    {
+      tool: "Amazon EventBridge + SQS",
+      use: "A CockroachDB changefeed on commit_log posts to the API, which publishes to EventBridge; a rule routes to SQS, and the worker adjudicates in parallel. Commits return as soon as they are durable instead of blocking on everyone they threatened. Three retries, then a dead-letter queue.",
     },
     {
       tool: "Amazon S3 + CloudFront",

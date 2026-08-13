@@ -290,9 +290,9 @@ export const WHY_CRDB = [
   },
   {
     feature: "Changefeeds",
-    need: "Tell in-flight agents that the ground moved.",
+    need: "Notify without a second source of truth.",
     detail:
-      "Commits stream out of the database itself rather than being polled, so notification latency is not added on top of the conflict window.",
+      "A changefeed on commit_log posts to Lambda, which publishes to EventBridge and on to an SQS worker. Publishing from the application instead would let 'the write succeeded' and 'the event was sent' disagree — a crash between them silently drops an adjudication. Reading the same durable log means an event exists if and only if the row does.",
   },
 ] as const;
 

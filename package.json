@@ -24,7 +24,11 @@
     "deploy": "node scripts/deploy.js",
     "api:build": "node api/build.mjs",
     "api:deploy": "node api/deploy.mjs",
-    "test:isolation": "node scripts/test-isolation.js"
+    "test:isolation": "node scripts/test-isolation.js",
+    "cdc:start": "node scripts/cdc.js start",
+    "cdc:stop": "node scripts/cdc.js stop",
+    "cdc:status": "node scripts/cdc.js status",
+    "pipeline": "node scripts/pipeline-status.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
@@ -33,6 +37,7 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@aws-sdk/client-eventbridge": "^3.1109.0",
     "esbuild": "^0.28.2"
   }
 }

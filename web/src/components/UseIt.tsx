@@ -1,5 +1,6 @@
 import { API_URL } from "@/lib/content";
 import InfoButton from "./InfoButton";
+import GetKey from "./GetKey";
 
 /**
  * INTERLOCK is a service, not only a demonstration.
@@ -11,6 +12,12 @@ import InfoButton from "./InfoButton";
  */
 
 const ENDPOINTS = [
+  {
+    method: "POST",
+    path: "/v1/keys",
+    what: "Self-serve. Creates an isolated tenant and returns a key, shown once.",
+    free: true,
+  },
   {
     method: "GET",
     path: "/v1/health",
@@ -92,7 +99,19 @@ export default function UseIt() {
             </code>
           </pre>
 
-          <p className="mt-4 text-[12px] leading-relaxed text-muted">
+          <div className="mt-5 border-t border-hairline pt-5">
+            <h4 className="text-[13px] font-semibold text-ink">
+              Run your own fleet against it
+            </h4>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+              A key gives you an isolated tenant. No other caller&rsquo;s commits
+              can adjudicate your intents &mdash; the tenant filter sits inside
+              the detection query, not around it.
+            </p>
+            <GetKey />
+          </div>
+
+          <p className="mt-5 border-t border-hairline pt-5 text-[12px] leading-relaxed text-muted">
             Your agents keep their own reasoning and their own tools. INTERLOCK
             arbitrates only the shared state — declare an intent, commit through
             it, and act on the ruling.

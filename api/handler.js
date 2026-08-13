@@ -30,6 +30,7 @@ import {
 import { preflight } from "../agents/continuity.js";
 import { runStreamingDemo } from "./stream.js";
 import { resolveCaller, issueKey } from "../agents/auth.js";
+import { handleChangefeed } from "./cdc.js";
 import { createHash, randomUUID } from "node:crypto";
 
 /** Hard daily ceilings. Breaching either returns 429, never a surprise bill. */
@@ -441,6 +442,15 @@ async function bufferedHandler(event) {
       );
       await logRequest(path, hash, 200, Date.now() - started, 0);
       return json(200, { ok: true, adjudications: rows });
+    }
+
+    /* --- changefeed webhook: CockroachDB pushes commits here -------------- */
+    if (path === "/v1/cdc" && method === "POST") {
+      const res = await handleChangefeed(event);
+      // Logged so `npm run pipeline` can see this hop. Without it the webhook
+      // is the one link in the chain whose health is invisible.
+      await logRequest("/v1/cdc", hash, res.statusCode, Date.now() - started, 0);
+      return { ...res, headers: { ...CORS, "content-type": "text/plain" } };
     }
 
     /* --- self-serve key issuance ----------------------------------------- */
