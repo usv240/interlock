@@ -1,0 +1,52 @@
+# Secrets — never commit
+.env
+.env.local
+.env*.local
+*.pem
+*.key
+credentials.json
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Next.js
+web/.next/
+web/out/
+web/build/
+.next/
+next-env.d.ts
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/.terraform.lock.hcl
+
+# Benchmark output (regenerable; committed results live in bench/results/)
+bench/raw/
+bench/tmp/
+
+# Build / tooling
+dist/
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*

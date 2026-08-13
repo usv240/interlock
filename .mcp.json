@@ -1,0 +1,23 @@
+{
+  "$comment": [
+    "CockroachDB Cloud Managed MCP Server, scoped to the INTERLOCK cluster.",
+    "",
+    "Anyone cloning this repo gets a read-only, audit-logged console over the",
+    "same memory the agents write to. Point your MCP client at this file and",
+    "you can ask questions like 'which intents were open when agent-3 committed'",
+    "without any risk of altering the incident you are investigating.",
+    "",
+    "Auth: run `claude /mcp` and choose Authenticate for the OAuth flow, or set",
+    "CCLOUD_API_KEY for headless use (see agents/mcp.js, which does the latter).",
+    "The cluster id below is not a secret."
+  ],
+  "mcpServers": {
+    "cockroachdb-cloud": {
+      "type": "http",
+      "url": "https://cockroachlabs.cloud/mcp",
+      "headers": {
+        "mcp-cluster-id": "30c08432-4010-4c25-bafe-fc71c61b01c7"
+      }
+    }
+  }
+}
