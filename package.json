@@ -28,7 +28,9 @@
     "cdc:start": "node scripts/cdc.js start",
     "cdc:stop": "node scripts/cdc.js stop",
     "cdc:status": "node scripts/cdc.js status",
-    "pipeline": "node scripts/pipeline-status.js"
+    "pipeline": "node scripts/pipeline-status.js",
+    "test:stranger": "node scripts/test-as-stranger.js",
+    "sync:env": "node scripts/sync-lambda-env.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",

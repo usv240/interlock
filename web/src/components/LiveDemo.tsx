@@ -90,6 +90,7 @@ export default function LiveDemo() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [throttled, setThrottled] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
   const cost = [...events].reverse().find((e) => e.t === "cost" || e.t === "done");
@@ -99,21 +100,63 @@ export default function LiveDemo() {
     (cost?.tokensOut ?? cost?.cost?.tokensOut ?? 0);
   const done = events.find((e) => e.t === "done");
 
+  /**
+   * Retry on 429 with backoff.
+   *
+   * This AWS account is capped at 10 concurrent Lambda executions — below the
+   * 1000 default, and shared with other projects — so a burst of simultaneous
+   * visitors gets throttled by the platform rather than by our own quota. A
+   * throttle is transient and retrying is the correct response, so the reader
+   * should never have to know it happened.
+   *
+   * Our own rate limit is a 429 too, but it arrives with a JSON body; a
+   * platform throttle does not. That difference is how we tell them apart —
+   * retrying against a real quota breach would be rude.
+   */
+  async function fetchWithRetry(url: string, init: RequestInit, attempts = 3) {
+    for (let i = 0; i < attempts; i++) {
+      const res = await fetch(url, init);
+      if (res.status !== 429) return res;
+
+      const clone = res.clone();
+      const body = await clone.text().catch(() => "");
+      const isOurQuota = body.trim().startsWith("{");
+      if (isOurQuota || i === attempts - 1) return res;
+
+      setThrottled(true);
+      await new Promise((r) => setTimeout(r, 900 * (i + 1) + Math.random() * 400));
+    }
+    throw new Error("unreachable");
+  }
+
   async function run() {
     setRunning(true);
     setEvents([]);
     setError(null);
     setElapsed(0);
+    setThrottled(false);
 
     const t0 = Date.now();
     const tick = setInterval(() => setElapsed(Date.now() - t0), 100);
 
     try {
-      const res = await fetch(`${API_URL}v1/demo/stream`, {
+      const res = await fetchWithRetry(`${API_URL}v1/demo/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
       });
+
+      if (res.status === 429) {
+        const body = await res.text().catch(() => "");
+        const parsed = body.trim().startsWith("{") ? JSON.parse(body) : null;
+        setError({
+          message: parsed?.error ?? "Too many people are running this at once.",
+          hint:
+            parsed?.hint ??
+            "This account is capped at 10 concurrent Lambda executions. Give it a few seconds and try again — or clone the repo and run it without limits.",
+        });
+        return;
+      }
 
       if (!res.body) throw new Error("No response stream");
 
@@ -188,7 +231,7 @@ export default function LiveDemo() {
           {running ? (
             <>
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              {(elapsed / 1000).toFixed(1)}s
+              {throttled ? "queued…" : `${(elapsed / 1000).toFixed(1)}s`}
             </>
           ) : events.length ? (
             "Run again"

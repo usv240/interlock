@@ -278,11 +278,12 @@ export default function Benchmark() {
         >
           {CITATIONS.coagent.title} ({CITATIONS.coagent.id})
         </a>
-        . The INTERLOCK row is a{" "}
-        <strong className="font-semibold text-ink-2">target</strong>, not a
-        result — our own harness has not run yet. When it does, the badge flips
-        to &ldquo;measured&rdquo; and these numbers are replaced with ours,
-        whatever they turn out to be.
+        . The INTERLOCK row is{" "}
+        <strong className="font-semibold text-ink-2">our own measurement</strong>
+        , produced by <code className="font-mono text-[12px]">npm run bench</code>{" "}
+        on the live cluster. It is taken at the top of the crossover curve below,
+        where tasks are expensive enough for the approach to pay &mdash; at
+        smaller task sizes it loses, which the curve shows rather than hides.
       </p>
     </div>
   );
