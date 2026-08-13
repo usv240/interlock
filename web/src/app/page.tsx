@@ -2,6 +2,7 @@ import Nav from "@/components/Nav";
 import Benchmark from "@/components/Benchmark";
 import Crossover from "@/components/Crossover";
 import Verified from "@/components/Verified";
+import ArchitectureDiagram from "@/components/ArchitectureDiagram";
 import LiveDemo from "@/components/LiveDemo";
 import UseIt from "@/components/UseIt";
 import InfoButton from "@/components/InfoButton";
@@ -420,7 +421,11 @@ function Architecture() {
         lede="The hackathon asks for at least two CockroachDB tools and one AWS service. We use all four CockroachDB tools — and only the AWS services we genuinely run on, because claiming more than you use is worse than claiming less."
       />
 
-      <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-10">
+        <ArchitectureDiagram />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
           <h3 className="text-sm font-semibold text-ink">
             CockroachDB &mdash; all four tools
