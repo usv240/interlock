@@ -28,6 +28,8 @@ import {
   processCommit,
 } from "../agents/interlock.js";
 import { preflight } from "../agents/continuity.js";
+import { runStreamingDemo } from "./stream.js";
+import { resolveCaller, issueKey } from "../agents/auth.js";
 import { createHash, randomUUID } from "node:crypto";
 
 /** Hard daily ceilings. Breaching either returns 429, never a surprise bill. */
@@ -65,7 +67,10 @@ const clientHash = (event) => {
  * The check and the increment happen in one serializable transaction, so two
  * concurrent requests cannot both observe "one call left" and both proceed.
  */
-async function reserveQuota(bucket) {
+async function reserveQuota(bucket, limits = {}) {
+  const callLimit = limits.callLimit ?? DAILY_CALL_LIMIT;
+  const usdLimit = limits.usdLimit ?? DAILY_USD_LIMIT;
+
   const { result } = await serializableTx(
     async (client) => {
       const { rows } = await client.query(
@@ -79,10 +84,10 @@ async function reserveQuota(bucket) {
       const calls = Number(rows[0].calls);
       const usd = Number(rows[0].usd_micros) / 1e6;
 
-      if (calls >= DAILY_CALL_LIMIT) {
+      if (calls >= callLimit) {
         return { allowed: false, reason: "daily call limit", calls, usd };
       }
-      if (usd >= DAILY_USD_LIMIT) {
+      if (usd >= usdLimit) {
         return { allowed: false, reason: "daily spend limit", calls, usd };
       }
 
@@ -284,7 +289,93 @@ async function runDemo(scenario = "queue") {
 /* Router                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export const handler = async (event) => {
+/**
+ * Streaming variant, wrapped by the runtime's streamifyResponse.
+ *
+ * Buffered routes still work here: writing the whole body and ending is a
+ * degenerate stream. So there is one entry point rather than two, and no route
+ * has to know which mode it is running under.
+ *
+ * `awslambda` is a runtime-injected global, absent locally — hence the guard,
+ * which also lets the same file be imported by tests.
+ */
+const streamify = globalThis.awslambda?.streamifyResponse;
+
+async function handleStreamingDemo(event, responseStream) {
+  const started = Date.now();
+  const hash = clientHash(event);
+
+  const quota = await reserveQuota(hash);
+  if (!quota.allowed) {
+    responseStream.write(
+      JSON.stringify({
+        t: "error",
+        error: `Rate limited: ${quota.reason} reached.`,
+        hint: "Limits exist so a public demo cannot run up an unbounded inference bill. Clone the repo to run it without limits.",
+      }) + "\n",
+    );
+    responseStream.end();
+    await logRequest("/v1/demo/stream", hash, 429, Date.now() - started, 0);
+    return;
+  }
+
+  let usage = null;
+  try {
+    usage = await runStreamingDemo((ev) => {
+      // Newline-delimited JSON: trivially parseable from a browser
+      // ReadableStream, and readable with curl, which matters because the
+      // README tells people to try it with curl.
+      responseStream.write(JSON.stringify(ev) + "\n");
+    });
+  } catch (e) {
+    responseStream.write(
+      JSON.stringify({ t: "error", error: e.message?.slice(0, 300) }) + "\n",
+    );
+  } finally {
+    responseStream.end();
+  }
+
+  if (usage) await recordSpend(bucket, usage);
+  await logRequest(
+    "/v1/demo/stream",
+    hash,
+    200,
+    Date.now() - started,
+    usage?.tokensTotal ?? 0,
+  );
+}
+
+export const handler = streamify
+  ? streamify(async (event, responseStream, _context) => {
+      const method = event?.requestContext?.http?.method ?? "GET";
+      const path = (event?.rawPath ?? "/").replace(/\/+$/, "") || "/";
+
+      if (path === "/v1/demo/stream" && method === "POST") {
+        const stream = globalThis.awslambda.HttpResponseStream.from(
+          responseStream,
+          {
+            statusCode: 200,
+            headers: {
+              "content-type": "application/x-ndjson",
+              ...CORS,
+            },
+          },
+        );
+        return handleStreamingDemo(event, stream);
+      }
+
+      // Everything else: run the buffered router and write its result out.
+      const res = await bufferedHandler(event);
+      const stream = globalThis.awslambda.HttpResponseStream.from(responseStream, {
+        statusCode: res.statusCode,
+        headers: res.headers,
+      });
+      stream.write(res.body);
+      stream.end();
+    })
+  : bufferedHandler;
+
+async function bufferedHandler(event) {
   const started = Date.now();
   const method = event?.requestContext?.http?.method ?? "GET";
   const path = (event?.rawPath ?? "/").replace(/\/+$/, "") || "/";
@@ -327,7 +418,9 @@ export const handler = async (event) => {
         },
         endpoints: [
           "GET  /v1/health",
+          "POST /v1/keys           (self-serve, key shown once)",
           "POST /v1/demo",
+          "POST /v1/demo/stream   (ndjson, shows the working)",
           "POST /v1/intents",
           "POST /v1/commits",
           "GET  /v1/adjudications",
@@ -350,8 +443,45 @@ export const handler = async (event) => {
       return json(200, { ok: true, adjudications: rows });
     }
 
+    /* --- self-serve key issuance ----------------------------------------- */
+    if (path === "/v1/keys" && method === "POST") {
+      // Rate limited by IP rather than by key: this is the endpoint you use
+      // when you do not yet have one.
+      const gate = await reserveQuota(`keys:${hash}`, { callLimit: 5, usdLimit: 999 });
+      if (!gate.allowed) {
+        return json(429, {
+          ok: false,
+          error: "Too many keys issued from this address today.",
+        });
+      }
+
+      const b = JSON.parse(event.body || "{}");
+      const issued = await issueKey({ name: b.name, label: b.label });
+      await logRequest(path, hash, 200, Date.now() - started, 0);
+
+      return json(200, {
+        ok: true,
+        key: issued.key,
+        prefix: issued.prefix,
+        tenant: issued.tenant,
+        limits: { dailyCalls: 2000, dailyUsd: 5 },
+        warning:
+          "This is the only time the key is shown. Only a SHA-256 of it is stored, so it cannot be recovered — issue a new one if lost.",
+        usage: `curl -H 'authorization: Bearer ${issued.prefix}...' ${process.env.PUBLIC_BASE_URL ?? ""}/v1/commits`,
+      });
+    }
+
     /* --- everything below spends money, so it needs quota ---------------- */
-    const quota = await reserveQuota(hash);
+    const caller = await resolveCaller(event?.headers?.authorization);
+    if (caller.error) {
+      await logRequest(path, hash, 401, Date.now() - started, 0);
+      return json(401, { ok: false, error: caller.error });
+    }
+
+    // Authenticated callers are metered against their own tenant; anonymous
+    // ones share a per-IP bucket in the public tenant.
+    const bucket = caller.authenticated ? `tenant:${caller.tenantId}` : hash;
+    const quota = await reserveQuota(bucket, caller);
     if (!quota.allowed) {
       await logRequest(path, hash, 429, Date.now() - started, 0, {
         reason: quota.reason,
@@ -366,7 +496,7 @@ export const handler = async (event) => {
 
     if (path === "/v1/demo" && method === "POST") {
       const result = await runDemo();
-      await recordSpend(hash, result.usage);
+      await recordSpend(bucket, result.usage);
       const { usage, ...body } = result;
       await logRequest(path, hash, 200, Date.now() - started, usage.tokensTotal, {
         repaired: body.summary.stepsRepaired,
@@ -389,7 +519,7 @@ export const handler = async (event) => {
         steps: b.steps ?? [],
         usage,
       });
-      await recordSpend(hash, usage);
+      await recordSpend(bucket, usage);
       await logRequest(path, hash, 200, Date.now() - started, usage.tokensTotal);
       return json(200, { ok: true, intent, cost: usage.toJSON() });
     }
@@ -413,11 +543,11 @@ export const handler = async (event) => {
         usage,
       });
       if (commit.conflict) {
-        await recordSpend(hash, usage);
+        await recordSpend(bucket, usage);
         return json(409, { ok: false, conflict: true, ...commit });
       }
       const outcomes = await processCommit(commit.commit.id, { usage });
-      await recordSpend(hash, usage);
+      await recordSpend(bucket, usage);
       await logRequest(path, hash, 200, Date.now() - started, usage.tokensTotal);
       return json(200, {
         ok: true,

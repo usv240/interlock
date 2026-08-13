@@ -23,7 +23,8 @@
     "rotate": "node scripts/rotate-credentials.js",
     "deploy": "node scripts/deploy.js",
     "api:build": "node api/build.mjs",
-    "api:deploy": "node api/deploy.mjs"
+    "api:deploy": "node api/deploy.mjs",
+    "test:isolation": "node scripts/test-isolation.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",

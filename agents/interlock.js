@@ -248,18 +248,24 @@ export async function commitResource({
 const THREATENED_SQL = `
 WITH RECURSIVE
   c AS (
-    SELECT id, resource_id, new_version, embedding, statement
+    SELECT id, resource_id, new_version, embedding, statement, tenant_id
     FROM commit_log
     WHERE id = $1
   ),
 
   -- 1. Literal dependents: read this row, saw an older version.
+  --
+  --    Note the tenant predicate on every arm below. It sits inside the query
+  --    rather than in a wrapper because a missed filter here would not merely
+  --    leak a row: one customer's commit would adjudicate another customer's
+  --    in-flight plans and repair steps in work they cannot see.
   exact AS (
     SELECT ir.intent_id, 'exact' AS how, NULL::FLOAT8 AS distance
     FROM intent_read ir
     JOIN c ON ir.resource_id = c.resource_id
     JOIN intent i ON i.id = ir.intent_id
     WHERE i.status IN ('open', 'threatened')
+      AND i.tenant_id IS NOT DISTINCT FROM c.tenant_id
       AND ir.observed_version < c.new_version
   ),
 
@@ -280,7 +286,9 @@ WITH RECURSIVE
     FROM descendants d
     JOIN plan_step ps ON d.to_kind = 'step' AND ps.id = d.to_id
     JOIN intent i ON i.id = ps.intent_id
+    CROSS JOIN c
     WHERE i.status IN ('open', 'threatened')
+      AND i.tenant_id IS NOT DISTINCT FROM c.tenant_id
   ),
 
   -- 3. Semantically close intents. No shared rows required.
@@ -294,6 +302,7 @@ WITH RECURSIVE
     FROM intent i
     WHERE i.status IN ('open', 'threatened')
       AND i.embedding IS NOT NULL
+      AND i.tenant_id IS NOT DISTINCT FROM (SELECT tenant_id FROM c)
     ORDER BY i.embedding <=> (SELECT embedding FROM c)
     LIMIT $2
   ),

@@ -36,12 +36,19 @@ const SERIALIZATION_FAILURE = "40001";
  */
 types.setTypeParser(20, (value) => {
   const n = Number(value);
-  if (!Number.isSafeInteger(n)) {
-    throw new Error(
-      `INT8 value ${value} exceeds safe integer range — revisit the INT8 parser in agents/db.js`,
-    );
-  }
-  return n;
+  if (Number.isSafeInteger(n)) return n;
+
+  // Beyond 2^53 we return a BigInt rather than throwing.
+  //
+  // The first version threw, on the reasoning that every INT8 in our schema is
+  // a small counter. That was true of our schema and false of CockroachDB's:
+  // SHOW CHANGEFEED JOBS returns job IDs around 1.2e18, and the guard turned a
+  // working query into a crash.
+  //
+  // BigInt keeps the loud-failure property that made throwing attractive —
+  // mixing a BigInt with a Number in arithmetic is a TypeError — while moving
+  // the failure to the point of actual misuse instead of the point of reading.
+  return BigInt(value);
 });
 
 let pool;

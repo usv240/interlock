@@ -1,87 +1,162 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { API_URL } from "@/lib/content";
 import InfoButton from "./InfoButton";
 
 /**
- * Runs a real conflict against the real cluster, in the browser.
+ * The mechanism, streamed as it happens.
  *
- * Nothing here is scripted playback. The button calls a Lambda function URL
- * which declares an intent, commits a competing change, runs detection and
- * adjudication, and returns the rows it produced. The trace below is that
- * response — including how long it took and what it cost.
+ * The earlier version returned a finished trace after five seconds, which
+ * showed the result and hid the working. This reads a newline-delimited JSON
+ * stream from Lambda and renders each event as it arrives — including the SQL
+ * that ran, the real embedding vector, the prompt the adjudicator was given,
+ * and a token counter that ticks up as tokens are genuinely spent.
+ *
+ * That distinction carries the whole claim. "Semantic conflict detection over a
+ * distributed vector index" is either a real recursive CTE joined to a real ANN
+ * search, or it is a phrase. Showing the query lets a reader decide which.
  */
 
-type TraceStep = {
-  step: string;
-  label: string;
+type Ev = {
+  t: string;
+  seq: number;
+  at?: number;
+  id?: string;
+  label?: string;
   detail?: string;
+  done?: boolean;
+  verdict?: string;
+  dims?: number;
+  preview?: number[];
+  ms?: number;
+  sql?: string;
+  prompt?: string;
+  model?: string;
+  agent?: string;
   detectedBy?: string;
   distance?: number | null;
-  stepsRepaired?: number;
-  stepsPreserved?: number;
-  stepsTotal?: number;
-};
-
-type DemoResult = {
-  ok: boolean;
-  durationMs: number;
-  trace: TraceStep[];
-  summary: { stepsRepaired: number; stepsPreserved: number; preservedPct: number; note: string };
-  cost: { usd: number; tokensIn: number; tokensOut: number; energyWh: number; gCO2e: number };
-  quota?: { callsLeft: number };
+  tokensIn?: number;
+  tokensOut?: number;
+  usd?: number;
+  wh?: number;
+  affectedSteps?: number[];
+  rationale?: string;
+  then?: unknown;
+  now?: unknown;
+  thenVersion?: number;
+  nowVersion?: number;
+  source?: string;
+  key?: string;
+  durationMs?: number;
+  summary?: { stepsRepaired: number; stepsPreserved: number; preservedPct: number };
+  cost?: { usd: number; tokensIn: number; tokensOut: number; wh: number; embedTokens: number; completionTokens: number };
   error?: string;
   hint?: string;
 };
 
-const STEP_STYLE: Record<string, { dot: string; ring: string }> = {
-  setup: { dot: "bg-muted", ring: "ring-hairline" },
-  declare: { dot: "bg-accent", ring: "ring-accent/30" },
-  commit: { dot: "bg-serious", ring: "ring-serious/30" },
-  adjudicate: { dot: "bg-good", ring: "ring-good/30" },
+const VERDICT_TONE: Record<string, string> = {
+  irrelevant: "text-good border-good/40",
+  invalidating: "text-serious border-serious/40",
+  fatal: "text-critical border-critical/40",
 };
 
+function Mono({ children, label }: { children: React.ReactNode; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 overflow-hidden rounded-lg border border-hairline bg-surface-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left"
+      >
+        <span className="font-mono text-[11px] uppercase tracking-wider text-muted">
+          {label}
+        </span>
+        <span className="text-[11px] text-muted">{open ? "hide" : "show"}</span>
+      </button>
+      {open && (
+        <pre className="max-h-72 overflow-auto border-t border-hairline px-3 py-2.5 text-[11px] leading-relaxed">
+          <code className="font-mono text-ink-2">{children}</code>
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export default function LiveDemo() {
-  const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [result, setResult] = useState<DemoResult | null>(null);
+  const [events, setEvents] = useState<Ev[]>([]);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  const cost = [...events].reverse().find((e) => e.t === "cost" || e.t === "done");
+  const liveUsd = cost?.usd ?? cost?.cost?.usd ?? 0;
+  const liveTokens =
+    (cost?.tokensIn ?? cost?.cost?.tokensIn ?? 0) +
+    (cost?.tokensOut ?? cost?.cost?.tokensOut ?? 0);
+  const done = events.find((e) => e.t === "done");
 
   async function run() {
-    setState("running");
-    setResult(null);
+    setRunning(true);
+    setEvents([]);
     setError(null);
     setElapsed(0);
 
-    const started = Date.now();
-    const tick = setInterval(() => setElapsed(Date.now() - started), 100);
+    const t0 = Date.now();
+    const tick = setInterval(() => setElapsed(Date.now() - t0), 100);
 
     try {
-      const res = await fetch(`${API_URL}v1/demo`, {
+      const res = await fetch(`${API_URL}v1/demo/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
       });
-      const data: DemoResult = await res.json();
 
-      if (!res.ok || !data.ok) {
-        setError({ message: data.error ?? `Request failed (${res.status})`, hint: data.hint });
-        setState("error");
-      } else {
-        setResult(data);
-        setState("done");
+      if (!res.body) throw new Error("No response stream");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done: finished, value } = await reader.read();
+        if (finished) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // NDJSON: complete lines only; keep the partial tail for the next chunk.
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const ev: Ev = JSON.parse(line);
+            if (ev.t === "error") {
+              setError({ message: ev.error ?? "Unknown error", hint: ev.hint });
+            } else {
+              setEvents((prev) => [...prev, ev]);
+            }
+          } catch {
+            /* partial line across chunk boundary; ignored by design */
+          }
+        }
+        scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
       }
     } catch (e) {
       setError({
         message: e instanceof Error ? e.message : "Network error",
         hint: "The endpoint may be cold-starting. Try once more.",
       });
-      setState("error");
     } finally {
       clearInterval(tick);
+      setRunning(false);
     }
   }
+
+  const stages = events.filter((e) => e.t === "stage");
 
   return (
     <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
@@ -90,32 +165,32 @@ export default function LiveDemo() {
           <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
             Run a live conflict
             <InfoButton
-              title="What this button does"
-              what="Executes the full mechanism against the production CockroachDB cluster and returns what actually happened."
-              how="A Lambda function declares an intent with a real embedding, commits a competing write in a serializable transaction, runs the three detection paths, sends the surviving candidates to a model on Bedrock, and records the ruling. The trace below is the resulting rows, not a recording."
-              note="Rate limited so a public endpoint cannot run up an unbounded inference bill. Each run costs about $0.003."
+              title="What you are watching"
+              what="The full mechanism executing against the production CockroachDB cluster, streamed event by event as it happens."
+              how="A Lambda function URL streams newline-delimited JSON. Each event carries what actually ran: the SQL, the real 1024-dimension embedding, the snapshot timestamp, the cosine distance, the prompt the adjudicator received, and its token usage."
+              note="Nothing is pre-recorded. Expand any SQL or PROMPT panel to see the exact text that executed."
               align="right"
             />
           </h3>
           <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
             Two agents, one queue. The Scheduler spends 12,500 tokens planning an
-            overnight rebalance; the Triage agent commits into the same queue
-            while it is thinking.
+            overnight rebalance; Triage commits into the same queue while it is
+            still thinking.
           </p>
         </div>
 
         <button
           type="button"
           onClick={run}
-          disabled={state === "running"}
-          className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          disabled={running}
+          className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
         >
-          {state === "running" ? (
+          {running ? (
             <>
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              running… {(elapsed / 1000).toFixed(1)}s
+              {(elapsed / 1000).toFixed(1)}s
             </>
-          ) : state === "done" ? (
+          ) : events.length ? (
             "Run again"
           ) : (
             "Run it"
@@ -123,92 +198,176 @@ export default function LiveDemo() {
         </button>
       </div>
 
-      {state === "idle" && (
-        <p className="mt-5 border-t border-hairline pt-5 text-[12px] text-muted">
-          Nothing here is pre-recorded. Each run creates real rows in the cluster
-          and calls a real model.
-        </p>
+      {/* Live counters — visibly moving while the run is in flight. */}
+      {(running || events.length > 0) && (
+        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-hairline pt-5 sm:grid-cols-4">
+          {[
+            { label: "Elapsed", value: `${((done?.durationMs ?? elapsed) / 1000).toFixed(1)}s` },
+            { label: "Tokens", value: liveTokens.toLocaleString() },
+            { label: "Cost", value: `$${liveUsd.toFixed(6)}` },
+            {
+              label: "Reasoning preserved",
+              value: done?.summary ? `${done.summary.preservedPct}%` : "—",
+            },
+          ].map((s) => (
+            <div key={s.label}>
+              <p className="text-[10px] uppercase tracking-wider text-muted">{s.label}</p>
+              <p className="tabular mt-1 text-lg font-semibold text-ink">{s.value}</p>
+            </div>
+          ))}
+        </div>
       )}
 
-      {state === "error" && error && (
+      {error && (
         <div className="mt-5 rounded-lg border border-serious/40 bg-surface-2 p-4">
           <p className="text-[13px] font-medium text-ink">{error.message}</p>
           {error.hint && <p className="mt-1 text-[12px] text-ink-2">{error.hint}</p>}
         </div>
       )}
 
-      {result && (
-        <div className="mt-6 border-t border-hairline pt-6">
+      {events.length === 0 && !running && !error && (
+        <p className="mt-5 border-t border-hairline pt-5 text-[12px] text-muted">
+          Nothing here is pre-recorded. Each run creates real rows, generates a
+          real embedding, and calls a real model.
+        </p>
+      )}
+
+      {events.length > 0 && (
+        <div
+          ref={scroller}
+          className="mt-5 max-h-[36rem] overflow-y-auto border-t border-hairline pt-5"
+        >
           <ol className="flex flex-col gap-0">
-            {result.trace.map((t, i) => {
-              const style = STEP_STYLE[t.step] ?? STEP_STYLE.setup;
-              const last = i === result.trace.length - 1;
+            {stages.map((s, i) => {
+              const after = events.filter(
+                (e) =>
+                  e.seq > s.seq &&
+                  e.seq < (stages[i + 1]?.seq ?? Infinity) &&
+                  e.t !== "stage" &&
+                  e.t !== "cost",
+              );
+              const last = i === stages.length - 1;
+
               return (
-                <li key={i} className="relative flex gap-4 pb-5 last:pb-0">
+                <li key={s.seq} className="relative flex gap-4 pb-5 last:pb-0">
                   {!last && (
-                    <span
-                      className="absolute left-[5px] top-4 h-full w-px bg-hairline"
-                      aria-hidden="true"
-                    />
+                    <span className="absolute left-[5px] top-4 h-full w-px bg-hairline" aria-hidden="true" />
                   )}
                   <span
-                    className={`relative mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full ring-4 ${style.dot} ${style.ring}`}
+                    className={`relative mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full ring-4 ${
+                      s.done ? "bg-accent ring-accent/20" : "bg-muted ring-hairline"
+                    }`}
                     aria-hidden="true"
                   />
+
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                      {t.step}
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                        {s.id}
+                      </span>
+                      <span className="tabular font-mono text-[10px] text-muted">
+                        +{s.at}ms
+                      </span>
+                    </div>
+
+                    <p
+                      className={`mt-0.5 text-sm font-medium ${
+                        s.verdict
+                          ? VERDICT_TONE[s.verdict]?.split(" ")[0] ?? "text-ink"
+                          : "text-ink"
+                      }`}
+                    >
+                      {s.label}
                     </p>
-                    <p className="mt-0.5 text-sm font-medium text-ink">{t.label}</p>
-                    {t.detail && (
-                      <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-                        {t.detail}
-                      </p>
+                    {s.detail && (
+                      <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{s.detail}</p>
                     )}
-                    {t.detectedBy && (
-                      <div className="mt-2.5 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
-                          {t.detectedBy}
-                        </span>
-                        {t.distance != null && (
-                          <span className="inline-flex items-center rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
-                            distance {t.distance}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center rounded-full border border-good/40 px-2.5 py-1 font-mono text-[11px] text-good">
-                          {t.stepsPreserved}/{t.stepsTotal} steps preserved
-                        </span>
-                      </div>
-                    )}
+
+                    {after.map((e) => {
+                      if (e.t === "sql")
+                        return <Mono key={e.seq} label="SQL that ran">{e.sql}</Mono>;
+
+                      if (e.t === "prompt")
+                        return (
+                          <Mono key={e.seq} label={`prompt → ${e.model}`}>{e.prompt}</Mono>
+                        );
+
+                      if (e.t === "vector")
+                        return (
+                          <div key={e.seq} className="mt-2 rounded-lg border border-hairline bg-surface-2 px-3 py-2">
+                            <p className="font-mono text-[11px] text-muted">
+                              {e.dims}-dim vector · first 8 values
+                            </p>
+                            <p className="tabular mt-1 break-all font-mono text-[11px] text-accent">
+                              [{e.preview?.join(", ")} …]
+                            </p>
+                          </div>
+                        );
+
+                      if (e.t === "threat")
+                        return (
+                          <div key={e.seq} className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
+                              {e.agent}
+                            </span>
+                            <span className="rounded-full border border-accent/40 px-2.5 py-1 font-mono text-[11px] text-accent">
+                              {e.detectedBy}
+                            </span>
+                            {e.distance != null && (
+                              <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
+                                cosine {e.distance}
+                              </span>
+                            )}
+                          </div>
+                        );
+
+                      if (e.t === "diff")
+                        return (
+                          <div key={e.seq} className="mt-2 rounded-lg border border-hairline bg-surface-2 px-3 py-2 font-mono text-[11px]">
+                            <p className="text-muted">{e.key} · via {e.source}</p>
+                            <p className="mt-1 text-ink-2">
+                              <span className="text-muted">then v{e.thenVersion}</span>{" "}
+                              {JSON.stringify(e.then)}
+                            </p>
+                            <p className="text-ink">
+                              <span className="text-muted">now&nbsp; v{e.nowVersion}</span>{" "}
+                              {JSON.stringify(e.now)}
+                            </p>
+                          </div>
+                        );
+
+                      if (e.t === "verdict")
+                        return (
+                          <div key={e.seq} className="mt-2 flex flex-wrap gap-2">
+                            <span className={`rounded-full border px-2.5 py-1 font-mono text-[11px] ${VERDICT_TONE[e.verdict ?? ""] ?? "border-hairline text-ink-2"}`}>
+                              {e.verdict}
+                            </span>
+                            <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
+                              steps {e.affectedSteps?.join(", ") || "none"} repaired
+                            </span>
+                            <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-ink-2">
+                              {e.tokensIn}→{e.tokensOut} tok · {e.ms}ms
+                            </span>
+                          </div>
+                        );
+
+                      return null;
+                    })}
                   </div>
                 </li>
               );
             })}
           </ol>
-
-          <div className="mt-6 grid grid-cols-2 gap-3 border-t border-hairline pt-5 sm:grid-cols-4">
-            {[
-              { label: "Reasoning preserved", value: `${result.summary.preservedPct}%` },
-              { label: "Wall clock", value: `${(result.durationMs / 1000).toFixed(1)}s` },
-              { label: "Cost", value: `$${result.cost.usd.toFixed(4)}` },
-              { label: "Energy", value: `${result.cost.energyWh.toFixed(3)} Wh` },
-            ].map((s) => (
-              <div key={s.label}>
-                <p className="text-[11px] uppercase tracking-wider text-muted">
-                  {s.label}
-                </p>
-                <p className="tabular mt-1 text-xl font-semibold text-ink">
-                  {s.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 text-[12px] leading-relaxed text-muted">
-            {result.summary.note}
-            {result.quota && ` · ${result.quota.callsLeft} runs left in today's public quota.`}
-          </p>
         </div>
+      )}
+
+      {done && (
+        <p className="mt-5 border-t border-hairline pt-5 text-[12px] leading-relaxed text-muted">
+          Under optimistic concurrency every one of those steps would have been
+          discarded and re-run. Embedding tokens {done.cost?.embedTokens} ·
+          completion tokens {done.cost?.completionTokens} ·{" "}
+          {done.cost?.wh.toFixed(4)} Wh.
+        </p>
       )}
     </div>
   );
