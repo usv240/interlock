@@ -2,6 +2,8 @@ import Nav from "@/components/Nav";
 import Benchmark from "@/components/Benchmark";
 import Crossover from "@/components/Crossover";
 import Verified from "@/components/Verified";
+import LiveDemo from "@/components/LiveDemo";
+import UseIt from "@/components/UseIt";
 import InfoButton from "@/components/InfoButton";
 import { Card, Pill, Section, SectionHead } from "@/components/ui";
 import { CITATIONS, REPO_URL, STEPS, WHY_CRDB } from "@/lib/content";
@@ -12,6 +14,16 @@ export default function Page() {
       <Nav />
       <main id="main" className="flex-1">
         <Hero />
+        <Section id="try">
+          <SectionHead
+            eyebrow="Try it"
+            title="Watch two agents collide"
+            lede="This runs against the production cluster, right now. Not a recording — real embeddings, a real serializable commit, a real ruling, and the cost of producing it."
+          />
+          <div className="mt-10">
+            <LiveDemo />
+          </div>
+        </Section>
         <Problem />
         <PriorArt />
         <Mechanism />
@@ -29,6 +41,14 @@ export default function Page() {
           <Verified />
         </Section>
         <Architecture />
+        <Section id="use-it">
+          <SectionHead
+            eyebrow="Use it"
+            title="It's a service, not just a demo"
+            lede="The endpoints this page calls are open. Point your own agent fleet at them — declare intents before acting, commit through the API, act on the ruling."
+          />
+          <UseIt />
+        </Section>
         <ChaosDrill />
       </main>
       <Footer />
@@ -361,21 +381,30 @@ function Architecture() {
     },
   ];
 
+  // Only services this project actually runs on. An earlier version of this
+  // list also claimed EventBridge, SQS and ECS Fargate, which were designed for
+  // and never wired. Listing four services we use beats seven we half-use —
+  // and "meaningfully integrated, not just initialized" is a pass/fail rule.
   const aws = [
     {
       tool: "Amazon Bedrock",
-      use: "Adjudicator model, Titan embeddings and Guardrails, with cost-aware routing across model tiers.",
+      use: "Titan Text Embeddings V2 for the vector path, and Claude across three tiers with cost-aware routing. Adjudication runs on the cheap tier because the provenance graph has already narrowed the question.",
     },
-    { tool: "AWS Lambda", use: "Conflict-detection workers, invoked per commit." },
     {
-      tool: "EventBridge + SQS",
-      use: "Fans commit notifications out to in-flight agents.",
+      tool: "AWS Lambda",
+      use: "The public API. Declares intents, commits, adjudicates, and enforces the spend ceiling. This is what the button above calls.",
     },
-    { tool: "Amazon S3", use: "Immutable adjudication evidence bundles." },
-    { tool: "ECS Fargate", use: "The long-running agent fleet." },
     {
-      tool: "CloudWatch",
-      use: "Budget alarms and a feature-flag kill switch on inference spend.",
+      tool: "Amazon S3 + CloudFront",
+      use: "Hosts this page as a static export with a private origin — CloudFront-only read via Origin Access Control, no public bucket policy.",
+    },
+    {
+      tool: "Amazon CloudWatch",
+      use: "Budget alarm at $20 with three thresholds, plus the logs that caught a cold-start failure and a cross-region IAM denial during build.",
+    },
+    {
+      tool: "AWS IAM",
+      use: "A runtime role scoped to five specific model ARNs rather than bedrock:*, with explicit denies on deleting evidence and altering model access.",
     },
   ];
 
@@ -384,7 +413,7 @@ function Architecture() {
       <SectionHead
         eyebrow="Architecture"
         title="What each piece actually does"
-        lede="The hackathon asks for at least two CockroachDB tools and one AWS service. We use all four tools, and none of them decoratively."
+        lede="The hackathon asks for at least two CockroachDB tools and one AWS service. We use all four CockroachDB tools — and only the AWS services we genuinely run on, because claiming more than you use is worse than claiming less."
       />
 
       <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -405,7 +434,9 @@ function Architecture() {
         </div>
 
         <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-ink">AWS</h3>
+          <h3 className="text-sm font-semibold text-ink">
+            AWS &mdash; only what we run on
+          </h3>
           <ul className="mt-4 flex flex-col gap-4">
             {aws.map((r) => (
               <li key={r.tool}>

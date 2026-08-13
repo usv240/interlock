@@ -27,6 +27,15 @@ const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 const sh = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { stdio: "inherit", shell: true, ...opts });
 
+/**
+ * Quote a path for a shell-invoked command.
+ *
+ * This project's directory contains spaces and a multiplication sign, so an
+ * unquoted path is parsed as several arguments and the sync fails with a
+ * confusing "command failed" rather than anything mentioning quoting.
+ */
+const q = (p) => `"${p}"`;
+
 console.log(b("\nDeploying INTERLOCK\n"));
 
 console.log(dim("  building static export…"));
@@ -37,7 +46,7 @@ console.log(ok("built"));
 // hash, so a stale copy is impossible and caching hard is free.
 console.log(dim("\n  uploading hashed assets…"));
 sh("aws", [
-  "s3", "sync", join(WEB, "out", "_next"), `s3://${BUCKET}/_next`,
+  "s3", "sync", q(join(WEB, "out", "_next")), `s3://${BUCKET}/_next`,
   "--delete",
   "--cache-control", '"public,max-age=31536000,immutable"',
 ]);
@@ -45,7 +54,7 @@ sh("aws", [
 // Then everything else, cached briefly so a redeploy is visible quickly.
 console.log(dim("\n  uploading pages…"));
 sh("aws", [
-  "s3", "sync", join(WEB, "out"), `s3://${BUCKET}`,
+  "s3", "sync", q(join(WEB, "out")), `s3://${BUCKET}`,
   "--delete",
   "--exclude", '"_next/*"',
   "--cache-control", '"public,max-age=60,must-revalidate"',

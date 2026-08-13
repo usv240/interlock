@@ -4,6 +4,20 @@
 
 Built on CockroachDB and AWS for the *Build with Agentic Memory* hackathon.
 
+🔗 **Live demo:** https://d3dgn014prmcy8.cloudfront.net
+🔌 **Public API:** `https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/`
+
+```bash
+# Run a real adjudication against the production cluster
+curl -s -X POST https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/v1/demo \
+  -H 'content-type: application/json' -d '{}'
+```
+
+INTERLOCK runs as a **service**, not only a demonstration. Point your own agent
+fleet at it: declare intents before acting, commit through the API, act on the
+ruling. Your agents keep their own reasoning and tools; INTERLOCK arbitrates
+only the shared state.
+
 ---
 
 ## The problem
@@ -127,14 +141,27 @@ Exactly-once is structural, not conventional: a `UNIQUE` index on `(commit_id, i
 
 ## AWS services used
 
+Only the services this project actually runs on. An earlier draft of this table
+also listed EventBridge, SQS and ECS Fargate — designed for, never wired. Since
+the rules require components to be *"meaningfully integrated, not just
+initialized"*, claiming five services we use beats eight we half-use.
+
 | Service | Role |
 |---|---|
-| **Amazon Bedrock** | Titan Text Embeddings V2 (1024-dim) + Claude across four tiers with cost-aware routing. Every call's tokens land in the ledger. |
-| **AWS Lambda** | Conflict-detection workers, invoked per commit. |
-| **EventBridge + SQS** | Fans commit notifications to in-flight agents. |
-| **Amazon S3** | Immutable adjudication evidence bundles. |
-| **ECS Fargate** | The long-running agent fleet. |
-| **CloudWatch** | Budget alarm and feature-flag kill switch on inference spend. |
+| **Amazon Bedrock** | Titan Text Embeddings V2 (1024-dim) for the vector path; Claude across three tiers with cost-aware routing. Adjudication runs on the cheap tier because the provenance graph has already narrowed the question. Every call's tokens land in the ledger. |
+| **AWS Lambda** | The public API — declares intents, commits, adjudicates, enforces the spend ceiling. Function URL, no API Gateway. |
+| **Amazon S3 + CloudFront** | Hosts the demo as a static export with a **private** origin: CloudFront-only read via Origin Access Control, no public bucket policy. |
+| **Amazon CloudWatch** | $20 budget alarm with three thresholds, plus the logs that caught a cold-start syntax failure and a cross-region IAM denial during the build. |
+| **AWS IAM** | Runtime role scoped to five specific model ARNs rather than `bedrock:*`, with explicit denies on deleting evidence and altering model access. See [`infra/`](infra/). |
+
+### A cross-region IAM lesson worth recording
+
+Claude's `us.` inference profiles perform **cross-region dispatch**. A policy
+allowing only `us-east-1` foundation-model ARNs fails at runtime with a denial
+naming `us-east-2`, because that is where the profile routed the call. Scoping
+least-privilege correctly means allowing the underlying model in every region
+the profile may dispatch to — while the profile ARN itself stays in its home
+region.
 
 ---
 

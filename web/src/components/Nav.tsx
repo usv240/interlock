@@ -5,11 +5,13 @@ import ThemeToggle from "./ThemeToggle";
 import { REPO_URL } from "@/lib/content";
 
 const LINKS = [
+  { href: "#try", label: "Try it" },
   { href: "#problem", label: "Problem" },
   { href: "#mechanism", label: "How it works" },
   { href: "#why-cockroachdb", label: "Why CockroachDB" },
   { href: "#benchmark", label: "Benchmark" },
   { href: "#architecture", label: "Architecture" },
+  { href: "#use-it", label: "Use it" },
 ];
 
 export default function Nav() {

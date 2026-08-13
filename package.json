@@ -21,12 +21,17 @@
     "continuity": "node agents/continuity.js",
     "mcp": "node agents/mcp.js",
     "rotate": "node scripts/rotate-credentials.js",
-    "deploy": "node scripts/deploy.js"
+    "deploy": "node scripts/deploy.js",
+    "api:build": "node api/build.mjs",
+    "api:deploy": "node api/deploy.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
     "@aws-sdk/credential-providers": "^3.1107.0",
     "dotenv": "^17.2.3",
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

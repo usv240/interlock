@@ -297,3 +297,11 @@ export const WHY_CRDB = [
 ] as const;
 
 export const REPO_URL = "https://github.com/usv240/interlock";
+
+/**
+ * The public API. INTERLOCK runs as a service, not just as a demo — this is the
+ * same endpoint an external agent fleet would call, and the landing page is
+ * simply its first consumer.
+ */
+export const API_URL =
+  "https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/";

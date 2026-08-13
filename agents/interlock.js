@@ -476,7 +476,7 @@ export async function adjudicate({ commitId, intentId, usage }) {
     return {
       verdict: "irrelevant",
       rationale:
-        "No plan step descends from the changed resource — settled by the provenance graph, no inference required.",
+        "No plan step descends from the changed resource. Settled by the provenance graph, with no inference required.",
       affectedSteps: [],
       stepsTotal: Number(n[0].c),
       model: "provenance-graph",
