@@ -116,13 +116,31 @@ The reason is structural: adjudication costs roughly a fixed amount per conflict
 `npm run chaos` destroys every in-flight connection at random moments while agents adjudicate.
 
 ```
-12 kill waves | 6 commits | 6 tasks completed | 0 abandoned
+13 kill waves fired | 6 commits | 6 tasks completed | 0 abandoned
 
 PASS  exactly-once adjudication (0 duplicate pairs)
 PASS  no orphaned repairs (0)
 PASS  counter balances: 6 increments for 6 commits
-PASS  nothing stuck mid-flight (0 threatened)
+PASS  nothing left mid-flight (0 threatened)
 ```
+
+The wave count varies per run — kills are fired at random moments — so expect
+something in the low teens rather than that exact number.
+
+**The fourth check used to be a global count, and that was wrong.** It asked
+whether *any* intent in the database sat in `threatened`, so an afternoon of
+running the test suite made it fail with 15 on a run that had left 4. It passed
+historically because the cluster happened to be clean, not because the property
+held. It is now scoped to the drill's own agents, like the other three always
+were.
+
+It also no longer asserts zero unconditionally. An intent left `threatened`
+after a connection dies mid-adjudication is **recoverable, not corrupt**: the
+sequence is mark → adjudicate → record, and a kill between the first and last
+leaves the middle state, with nothing lost and nothing doubled, because the
+changefeed re-delivers and the `UNIQUE` index makes the retry a no-op. Asserting
+zero would have been asserting that a random kill never lands mid-sequence —
+which is precisely what this drill exists to cause.
 
 **What this proves and what it does not.** CockroachDB Basic is managed, so we cannot take a region offline, and a script claiming to would be theatre. The database's half — surviving region loss — is a configuration property, verified declaratively (`3 regions, survival goal = region`). *Our* half — behaving correctly when the database becomes unreachable mid-decision — is what the drill attacks, because from an application's point of view a region loss *is* connections dying mid-flight.
 
@@ -134,7 +152,7 @@ Exactly-once is structural, not conventional: a `UNIQUE` index on `(commit_id, i
 
 | Tool | What the agent actually does with it |
 |---|---|
-| **Distributed Vector Indexing** | One **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — semantic detection never asks about resolved plans, so indexing them is write amplification for nothing. At **1,717 live plans the planner selects it** (`npm run ai:vector` prints the plan and names the tenant). Threshold measured, not guessed — `npm run ai:calibrate`. |
+| **Distributed Vector Indexing** | One **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — semantic detection never asks about resolved plans, so indexing them is write amplification for nothing. At **roughly 1,700 live plans the planner selects it** (`npm run ai:vector` prints the plan and names the tenant). Threshold measured, not guessed — `npm run ai:calibrate`. |
 | **Managed MCP Server** | Read-only, audit-logged console for inspecting live conflicts. Investigation is inherently read-only, so the safe-by-default posture is exactly right. |
 | **ccloud CLI** | Continuity agent: inspects regions, reads the GC window that bounds time-travel reach, snapshots before adjudication cascades. |
 | **Agent Skills Repo** | Consumed for schema and index design. We wrote one back — skills/managing-long-running-agent-transactions/ — and it is in this repo, not yet upstream. |

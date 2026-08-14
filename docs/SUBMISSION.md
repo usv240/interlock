@@ -61,7 +61,7 @@ Correctness never rests on the model's judgement: the final write is a real `SER
 
 | Tool | What the agent does with it |
 |---|---|
-| **Distributed Vector Indexing** | A **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — because semantic detection never asks about resolved plans. At **1,717 live plans the planner selects it**; `npm run ai:vector` prints the plan and names the tenant it probed. Threshold **measured, not guessed** (`npm run ai:calibrate`) |
+| **Distributed Vector Indexing** | A **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — because semantic detection never asks about resolved plans. At **roughly 1,700 live plans the planner selects it**; `npm run ai:vector` prints the plan and names the tenant it probed. Threshold **measured, not guessed** (`npm run ai:calibrate`) |
 | **Managed MCP Server** | Not a human console — a **read-only tool belt for the adjudicating agent**. Before ruling it may request one lookup: has this resource churned all morning, or is this the first change in an hour? The channel cannot express a mutation, and every lookup is audit-logged outside our own logging |
 | **ccloud / Cloud API** | A continuity agent that **refuses to let adjudication run** if the cluster is not actually configured to survive a region, and reports `gc.ttlseconds` per table — the real ceiling on how far back a diff can read |
 | **Agent Skills** | Consumed for schema and index design. We wrote one in return — `skills/managing-long-running-agent-transactions/` — carrying the traps that cost us real time. It ships in this repo; it is **not** upstream, and we would rather say so than imply a merge that has not happened |
@@ -114,7 +114,7 @@ Bring-your-own-key, so a tenant can use their own model and their own bill — t
 
 | Criterion | Evidence |
 |---|---|
-| **Agentic Memory Design** | Memory *is* the mechanism, not the storage: intents, read-sets, a recursive provenance graph, embeddings, MVCC snapshots, bitemporal validity. 10 migrations, 15 tables, 1,801 intents, **1,717 in-flight plans where the planner selects the vector index**, 3-region topology. Swap the database and the product stops existing |
+| **Agentic Memory Design** | Memory *is* the mechanism, not the storage: intents, read-sets, a recursive provenance graph, embeddings, MVCC snapshots, bitemporal validity. 10 migrations, 15 tables, 1,801 intents, **~1,700 in-flight plans where the planner selects the vector index**, 3-region topology. Swap the database and the product stops existing |
 | **Technological Implementation** | Recursive CTE ⨝ ANN ⨝ time-travel in one serializable transaction; async pipeline with DLQ and partial-batch failure; 13 SDK contract tests and 14 stranger tests against the deployed endpoint; nine documented bug hunts, six of them silent failures |
 | **Real-World Impact** | Not "agent fleets" abstractly — **any system where an LLM writes to shared state**: coding agents touching one repo, ops automations touching one runbook, support bots touching one queue. Public API, self-serve keys, LangChain callback, and a published crossover so adopters know when *not* to use it |
 | **Product Readiness** | 3 regions + `SURVIVE REGION FAILURE`; chaos drill; exactly-once by constraint; **enforced** per-tenant *and* service-wide spend ceilings; least-privilege IAM with explicit denies; credential rotation with env sync; `npm run pipeline` health check; browser-level CORS regression harness |

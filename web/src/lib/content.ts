@@ -125,7 +125,7 @@ export const VERIFIED = [
   // is a per-tenant question — the probe names the tenant it asked about.
   {
     claim: "Vector index actually selected",
-    value: "yes, at 1,717 in-flight plans",
+    value: "yes, at ~1,700 in-flight plans",
     how: "npm run ai:vector",
   },
   {
@@ -139,7 +139,7 @@ export const VERIFIED = [
     how: "GET /v1/health",
   },
   { claim: "Lost updates", value: "0 across every benchmark mode", how: "counter arithmetic" },
-  { claim: "Exactly-once adjudication", value: "held under 12 kill waves", how: "npm run chaos" },
+  { claim: "Exactly-once adjudication", value: "held under repeated connection kills", how: "npm run chaos" },
 ] as const;
 
 /** Headline figures for the KPI row. */
