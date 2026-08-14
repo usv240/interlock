@@ -6,6 +6,7 @@ import ArchitectureDiagram from "@/components/ArchitectureDiagram";
 import LiveDemo from "@/components/LiveDemo";
 import HeroVisual from "@/components/HeroVisual";
 import UseIt from "@/components/UseIt";
+import WhatYouGet from "@/components/WhatYouGet";
 import InfoButton from "@/components/InfoButton";
 import { Card, Disclosure, Pill, Section, SectionHead } from "@/components/ui";
 import { CITATIONS, REPO_URL, STEPS, WHY_CRDB } from "@/lib/content";
@@ -59,9 +60,10 @@ export default function Page() {
         <Section id="use-it" tone="raised">
           <SectionHead
             eyebrow="Use it"
-            title="It's a service, not just a demo"
-            lede="The endpoints this page calls are open. Point your own agent fleet at them — declare intents before acting, commit through the API, act on the ruling."
+            title="A referee for your agents, not a place to run them"
+            lede="You keep your models, your prompts and your tools. INTERLOCK arbitrates the state two agents both touch — and nothing else."
           />
+          <WhatYouGet />
           <UseIt />
         </Section>
         <ChaosDrill />
