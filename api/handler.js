@@ -486,17 +486,28 @@ async function bufferedHandler(event) {
       // Rate limited by IP rather than by key: this is the endpoint you use
       // when you do not yet have one.
       //
-      // Issuance is cheap — a row and a hash, no inference — so the limit only
-      // needs to stop bulk tenant creation, not to ration. It was 5, which a
-      // reader could exhaust by retyping a name and a shared office IP could
-      // exhaust for everyone in it. The cost of being slightly too generous
-      // here is a few unused rows; the cost of being too tight is someone
-      // deciding the service is broken.
-      const gate = await reserveQuota(`keys:${hash}`, { callLimit: 25, usdLimit: 999 });
+      // Issuance is cheap — a row and a hash, no inference — so this limit only
+      // needs to stop bulk tenant creation, not to ration. It was 5, then 25,
+      // and 25 was still wrong: an afternoon of running our own test suite
+      // exhausted it, which is a mild inconvenience for us and a closed door for
+      // anyone behind the same NAT.
+      //
+      // The thing worth rationing is spend, and that is already capped globally
+      // by DAILY_CALL_LIMIT and DAILY_USD_LIMIT below. A key that is never used
+      // costs a row. So this is set where it stops someone scripting a million
+      // tenants and nowhere tighter.
+      const KEYS_PER_ADDRESS_PER_DAY = 100;
+      const gate = await reserveQuota(`keys:${hash}`, {
+        callLimit: KEYS_PER_ADDRESS_PER_DAY,
+        usdLimit: 999,
+      });
       if (!gate.allowed) {
         return json(429, {
           ok: false,
-          error: "Too many keys issued from this address today.",
+          error:
+            `More than ${KEYS_PER_ADDRESS_PER_DAY} keys from this address today. ` +
+            `The limit resets at midnight UTC — and you do not need a key for ` +
+            `GET /v1/health or POST /v1/demo, which is most of what there is to see.`,
         });
       }
 

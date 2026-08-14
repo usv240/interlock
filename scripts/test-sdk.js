@@ -9,6 +9,9 @@
  * Run: npm run test:sdk
  */
 import { Interlock, InterlockError } from "../sdk/client.js";
+
+const DEFAULT_BASE =
+  "https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/";
 import { InterlockCallback } from "../sdk/langchain.js";
 
 let passed = 0;
@@ -36,12 +39,39 @@ console.log("\nSDK contract\n");
 
 /* ---------------------------------------------------------------- issuing */
 
-const issued = await Interlock.issueKey({ name: "SDK Test", label: "test" });
+// Reuse a key when one is supplied. Each full run issues four, and running the
+// suite a few times in an afternoon exhausted the per-address daily limit —
+// which then blocks the actual product for everyone sharing that address.
+// A test that degrades the thing it tests is a bad test.
+const issued = process.env.INTERLOCK_KEY
+  ? { key: process.env.INTERLOCK_KEY, tenant: { slug: "(reused from INTERLOCK_KEY)" } }
+  : await Interlock.issueKey({ name: "SDK Test", label: "test" });
+
 const client = new Interlock({ apiKey: issued.key });
 
 await check("issueKey returns a usable key and a tenant", async () => {
   truthy(issued.key?.startsWith("ilk_"), "key prefix");
   truthy(issued.tenant?.slug, "tenant slug");
+});
+
+await check("the key issuance limit is a refusal, not a crash", async () => {
+  // Exercised because we hit it for real and the client had no idea what to do
+  // with it. A 429 from our own quota must arrive as a readable message with
+  // our `error` shape, so the SDK can tell it apart from a platform throttle
+  // and decline to retry past it.
+  const res = await fetch(`${process.env.INTERLOCK_BASE ?? DEFAULT_BASE}v1/keys`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "shape check" }),
+  });
+  const body = await res.json();
+  if (res.status === 429) {
+    truthy(typeof body.error === "string" && body.error.length > 20, "429 explains itself");
+    eq(body.ok, false, "429 sets ok:false");
+  } else {
+    eq(res.status, 200, "unexpected status from /v1/keys");
+    truthy(body.key?.startsWith("ilk_"), "issued key");
+  }
 });
 
 await check("health reports topology", async () => {

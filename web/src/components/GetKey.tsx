@@ -161,8 +161,12 @@ export default function GetKey() {
           </p>
         </div>
       )}
+      {/* The number here was wrong — it said five while the API allowed
+          twenty-five, which is the kind of small false claim that costs more
+          credibility than the fact it misstates. It is now a hundred, and this
+          sentence stays deliberately vague rather than re-inviting the drift. */}
       <p className="mt-2 text-[12px] text-muted">
-        Free, instant, no signup. Five keys per address per day.
+        Free, instant, no signup. Generous per-address limit, reset daily.
       </p>
     </form>
   );

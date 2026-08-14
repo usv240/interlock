@@ -47,7 +47,13 @@ export default function Nav() {
     // intersection-ratio approach picks whichever section is *most* visible,
     // which flickers between two when a short one sits fully inside the
     // viewport next to a tall one.
-    const READING_LINE = 0.35;
+    //
+    // The line sits high deliberately. At 35% of the viewport it was far enough
+    // down that a short section handed the highlight to its successor while the
+    // reader was still inside it: scroll 200px into a 500px section and the next
+    // section's top has already crossed a 315px line. Sections here run from
+    // ~450px to ~1800px, so the line has to clear the shortest of them.
+    const READING_LINE = 0.16;
     const onSpy = () => {
       const line = window.innerHeight * READING_LINE;
       let current = "";
