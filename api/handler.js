@@ -40,10 +40,26 @@ const DAILY_USD_LIMIT = Number(process.env.DAILY_USD_LIMIT ?? 3);
 /** Single switch to take the endpoint down without a redeploy. */
 const ENABLED = process.env.API_ENABLED !== "0";
 
+/**
+ * NO CORS HEADERS HERE. That is deliberate, and it was a bug.
+ *
+ * The Lambda function URL has its own CORS configuration, and AWS applies it to
+ * every response. When this handler set the headers too, both were emitted and
+ * merged into one comma-joined value:
+ *
+ *   access-control-allow-origin: *,https://d3dgn014prmcy8.cloudfront.net
+ *
+ * which is not a valid origin, so browsers rejected it. The preflight passed —
+ * the function URL answers OPTIONS by itself, without invoking this handler —
+ * so the failure appeared only on the real request, as a bare "network error"
+ * with a green checkmark on the OPTIONS in the network tab. `curl` was fine
+ * throughout, because CORS is enforced by browsers and nothing else.
+ *
+ * One owner per header. The function URL owns CORS; configure it with
+ * `aws lambda update-function-url-config --cors`. This object carries only
+ * headers that are genuinely ours.
+ */
 const CORS = {
-  "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "content-type",
   "Cache-Control": "no-store",
 };
 
