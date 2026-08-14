@@ -199,6 +199,7 @@ npm run demo          # end-to-end walkthrough of the mechanism
 | `npm run bench:sweep` | The crossover curve |
 | `npm run chaos` | Connection-severing resilience drill |
 | `npm run quickstart` | The whole loop against the hosted API — no setup |
+| `npm run compare -- <key>` | Two collisions priced with and against INTERLOCK |
 | `npm run verify -- <key>` | Checks a key: auth, isolation, a real ruling |
 | `npm run test:tiers` | Proves each adjudicator tier maps to a distinct model |
 | `npm run test:sdk` | 12 contract checks against the live endpoint |
