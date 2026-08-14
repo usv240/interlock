@@ -120,6 +120,24 @@ export const VERIFIED = [
     how: "npm run continuity",
   },
   { claim: "Embedding dimensions", value: "1024 (Titan V2)", how: "live Bedrock invocation" },
+  // The claim this table existed to make and could not, until there was enough
+  // volume to make it. The index is partial and tenant-prefixed, so selection
+  // is a per-tenant question — the probe names the tenant it asked about.
+  {
+    claim: "Vector index actually selected",
+    value: "yes, at 1,717 in-flight plans",
+    how: "npm run ai:vector",
+  },
+  {
+    claim: "Tenant isolation",
+    value: "0.0000 cosine, still not matched across tenants",
+    how: "npm run test:isolation",
+  },
+  {
+    claim: "Spend ceiling",
+    value: "enforced per tenant and service-wide",
+    how: "GET /v1/health",
+  },
   { claim: "Lost updates", value: "0 across every benchmark mode", how: "counter arithmetic" },
   { claim: "Exactly-once adjudication", value: "held under 12 kill waves", how: "npm run chaos" },
 ] as const;

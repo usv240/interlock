@@ -134,7 +134,7 @@ Exactly-once is structural, not conventional: a `UNIQUE` index on `(commit_id, i
 
 | Tool | What the agent actually does with it |
 |---|---|
-| **Distributed Vector Indexing** | C-SPANN indexes over `intent`, `commit_log`, `plan_step` embeddings. Detects plans threatened by *meaning* when they share no rows. Threshold is measured, not guessed — `npm run ai:calibrate`. |
+| **Distributed Vector Indexing** | One **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — semantic detection never asks about resolved plans, so indexing them is write amplification for nothing. At **1,717 live plans the planner selects it** (`npm run ai:vector` prints the plan and names the tenant). Threshold measured, not guessed — `npm run ai:calibrate`. |
 | **Managed MCP Server** | Read-only, audit-logged console for inspecting live conflicts. Investigation is inherently read-only, so the safe-by-default posture is exactly right. |
 | **ccloud CLI** | Continuity agent: inspects regions, reads the GC window that bounds time-travel reach, snapshots before adjudication cascades. |
 | **Agent Skills Repo** | Consumed for schema and index design. We wrote one back — skills/managing-long-running-agent-transactions/ — and it is in this repo, not yet upstream. |
@@ -148,7 +148,7 @@ initialized"*, claiming five services we use beats eight we half-use.
 
 | Service | Role |
 |---|---|
-| **Amazon Bedrock** | Titan Text Embeddings V2 (1024-dim) for the vector path; Claude across three tiers with cost-aware routing. Adjudication runs on the cheap tier because the provenance graph has already narrowed the question. Every call's tokens land in the ledger. |
+| **Amazon Bedrock** | Titan Text Embeddings V2 (1024-dim) for the vector path; Claude on **two caller-selectable tiers** (`adjudicator: "bulk" \| "adjudicator"`), named by role so client code survives a model id moving. The cheap tier is the default because the provenance graph has already narrowed the question. A third tier exists in code and is deliberately **not** granted or published — see `infra/iam-policy.json`. Every call's tokens land in the ledger. |
 | **AWS Lambda** | The public API — declares intents, commits, adjudicates, enforces the spend ceiling. Function URL, no API Gateway. |
 | **Amazon S3 + CloudFront** | Hosts the demo as a static export with a **private** origin: CloudFront-only read via Origin Access Control, no public bucket policy. |
 | **Amazon CloudWatch** | $20 budget alarm with three thresholds, plus the logs that caught a cold-start syntax failure and a cross-region IAM denial during the build. |

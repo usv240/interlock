@@ -7,6 +7,7 @@ import LiveDemo from "@/components/LiveDemo";
 import HeroVisual from "@/components/HeroVisual";
 import UseIt from "@/components/UseIt";
 import WhatYouGet from "@/components/WhatYouGet";
+import ReproduceIt from "@/components/ReproduceIt";
 import InfoButton from "@/components/InfoButton";
 import { Card, Disclosure, Pill, Section, SectionHead } from "@/components/ui";
 import { CITATIONS, REPO_URL, STEPS, WHY_CRDB } from "@/lib/content";
@@ -45,6 +46,10 @@ export default function Page() {
           <div className="mt-4">
             <Crossover />
           </div>
+
+          {/* A cost claim should come with the command that reproduces it, in
+              the same eyeline as the claim. */}
+          <ReproduceIt />
 
           <Disclosure
             className="mt-4"
@@ -455,7 +460,10 @@ function Architecture() {
   const aws = [
     {
       tool: "Amazon Bedrock",
-      use: "Titan Text Embeddings V2 for the vector path, and Claude across three tiers with cost-aware routing. Adjudication runs on the cheap tier because the provenance graph has already narrowed the question.",
+      // Said "three tiers" while the runtime role granted two. The third was
+      // published as available, ordered by a caller, and returned an IAM denial
+      // as a 500 with our account id in it.
+      use: "Titan Text Embeddings V2 for the vector path, and Claude on two caller-selectable tiers — pass `adjudicator` on a commit, named by role rather than model id so your code survives the id moving. The cheap tier is the default because the provenance graph has already narrowed the question before a model sees it.",
     },
     {
       tool: "AWS Lambda",
