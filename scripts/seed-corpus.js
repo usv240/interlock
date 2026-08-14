@@ -17,8 +17,20 @@
  * same ones the detector would compute. Random unit vectors would have proven
  * index selection while making every nearest-neighbour result meaningless.
  *
- * Rows land in their own tenant so they can never be adjudicated against real
- * traffic, and so they are trivially removable.
+ * WHY THESE ROWS ARE 'open' AND NOT 'aborted'
+ * They were 'aborted' at first, on the reasoning that a resolved intent cannot
+ * be adjudicated by accident. Then migration 010 made the vector index PARTIAL —
+ * it covers `status IN ('open','threatened')`, because semantic detection only
+ * ever asks about plans still in flight — and the entire corpus fell outside the
+ * index it exists to exercise. 1,741 seeded rows, 20 rows in the index, and a
+ * README caveat saying the planner prefers a scan. Every part of that was true
+ * and the conclusion was still wrong.
+ *
+ * Isolation does not come from the status. It comes from the tenant: every
+ * detection query filters `tenant_id IS NOT DISTINCT FROM` the committing
+ * tenant, so a commit in anyone else's tenant cannot see these no matter what
+ * state they are in. The status was never what made them safe — it only made
+ * them invisible.
  *
  *   npm run seed:corpus            add 2000 intents
  *   npm run seed:corpus -- --n 500
@@ -121,7 +133,7 @@ async function worker(slice) {
     const { literal } = await embedWithRetry(statement);
     await query(
       `INSERT INTO intent (tenant_id, agent_id, task_id, status, statement, embedding, read_hlc)
-       VALUES ($1, $2, $3, 'aborted', $4, $5::VECTOR, cluster_logical_timestamp())`,
+       VALUES ($1, $2, $3, 'open', $4, $5::VECTOR, cluster_logical_timestamp())`,
       [tid, agentId, randomUUID(), statement, literal],
     );
     done++;
@@ -141,18 +153,26 @@ const u = usage.toJSON();
 const { rows: total } = await query(
   `SELECT count(*)::INT8 AS n FROM intent WHERE embedding IS NOT NULL`,
 );
+// The number that decides whether any of this mattered: rows inside the partial
+// index, not rows in the table.
+const { rows: indexed } = await query(
+  `SELECT count(*)::INT8 AS n FROM intent
+   WHERE status IN ('open','threatened') AND embedding IS NOT NULL`,
+);
 
 console.log(
   ok(
     `seeded ${done} intents in ${((Date.now() - started) / 1000).toFixed(0)}s — ` +
-      `${total[0].n} embedded rows total`,
+      `${total[0].n} embedded rows total, ${indexed[0].n} inside the vector index`,
   ),
 );
 console.log(
   dim(
     `      ${u.embedTokens} embedding tokens, $${u.usd.toFixed(5)}\n` +
-      `      status 'aborted' and a separate tenant, so these are never adjudicated\n` +
-      `      against real traffic. Remove with: npm run seed:corpus -- --clean`,
+      `      Isolated by tenant, not by status: every detection query filters on\n` +
+      `      tenant_id, so no other tenant's commit can reach these.\n` +
+      `      Check the planner now:  npm run ai:vector\n` +
+      `      Remove with:            npm run seed:corpus -- --clean`,
   ),
 );
 

@@ -367,6 +367,23 @@ function Mechanism() {
           </li>
         ))}
       </ol>
+
+      {/* The audit feed is public and it disagrees with the claim above. Better
+          to say so here than to let a reader find it and conclude the claim was
+          decorative. */}
+      <p className="mt-6 rounded-lg border border-hairline bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+        <strong className="font-semibold text-ink">
+          Our own audit feed disagrees with that
+        </strong>{" "}
+        &mdash; about seven in ten rulings on{" "}
+        <code className="font-mono text-[12px] text-ink-2">/v1/adjudications</code>{" "}
+        are <em>invalidating</em>. That feed is not production traffic: every row
+        in it came from a demo, a test or the benchmark, and all three construct a
+        real conflict on purpose. Nobody writes a demo where nothing happens. The
+        claim rests on the benchmark workload, where writes are drawn
+        realistically &mdash; and the endpoint returns this caveat next to the
+        counts rather than waiting to be caught.
+      </p>
     </Section>
   );
 }

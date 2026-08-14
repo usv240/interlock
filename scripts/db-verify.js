@@ -149,8 +149,20 @@ async function main() {
   // production path full-scanned, which is what happened: any WHERE clause sent
   // the old full-table index to a scan, and the check never asked with one.
   const zeros = `[${Array(1024).fill(0).join(",")}]`;
+
+  // Index selection is a per-tenant question — the index is prefixed by
+  // tenant_id — so this asks the tenant that actually has plans in flight.
+  const { rows: busiest } = await client.query(`
+    SELECT i.tenant_id, count(*)::INT8 AS n
+    FROM intent i
+    WHERE i.status IN ('open','threatened') AND i.embedding IS NOT NULL
+    GROUP BY 1 ORDER BY n DESC LIMIT 1
+  `);
+  const scopeId = busiest[0]?.tenant_id ?? null;
+  const live = Number(busiest[0]?.n ?? 0);
+
   const PRODUCTION_PREDICATE = `
-    WHERE tenant_id IS NOT DISTINCT FROM NULL
+    WHERE tenant_id IS NOT DISTINCT FROM ${scopeId ? `'${scopeId}'` : "NULL"}
       AND status IN ('open','threatened')
       AND embedding IS NOT NULL`;
 
@@ -160,12 +172,6 @@ async function main() {
   );
   const planText = plan.map((r) => Object.values(r)[0]).join("\n");
   const usesIndex = /vector search/i.test(planText);
-
-  const { rows: cnt } = await client.query(
-    `SELECT count(*)::INT8 AS live FROM intent
-     WHERE status IN ('open','threatened') AND embedding IS NOT NULL`,
-  );
-  const live = Number(cnt[0].live);
 
   if (usesIndex) {
     check(true, `planner selects the vector index (${live} plans in flight)`);
