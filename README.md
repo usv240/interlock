@@ -199,6 +199,7 @@ npm run demo          # end-to-end walkthrough of the mechanism
 | `npm run bench:sweep` | The crossover curve |
 | `npm run chaos` | Connection-severing resilience drill |
 | `npm run quickstart` | The whole loop against the hosted API — no setup |
+| `npm run test:tiers` | Proves each adjudicator tier maps to a distinct model |
 | `npm run test:sdk` | 12 contract checks against the live endpoint |
 | `npm run example:langchain` | Two LangChain agents contending over one queue |
 
@@ -248,7 +249,17 @@ npm run api:deploy && npm run deploy      # your own API and site
 
 ## Using it from your own agents
 
+**Full API reference: [docs/API.md](docs/API.md).**
+
 INTERLOCK is a service, not a framework. Your agents keep their own models, prompts and tools; it arbitrates the shared state and nothing else.
+
+Worth being explicit about what that means commercially, because it decides whether this fits your architecture:
+
+- **We run the inference.** You do not bring a model or a model key. When a commit threatens an in-flight plan, we call Bedrock on our account to judge whether the plan actually broke. You are metered, not billed.
+- **We never see your agent's reasoning** — only a one-sentence intent, a read-set, and a step list.
+- **Most conflicts never reach a model.** The provenance graph settles them for free; a ruling with `model: "provenance-graph"` cost nothing.
+- **You can choose who rules.** `adjudicator: "bulk" | "adjudicator"` on a commit, named by role rather than model id. `GET /v1/health` publishes what is available. Unknown values are refused rather than silently downgraded.
+- **This is not an inference proxy.** If you want somewhere to run your model calls, this is the wrong service.
 
 ```js
 import { Interlock } from "./sdk/client.js";

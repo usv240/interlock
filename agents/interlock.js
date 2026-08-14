@@ -556,7 +556,7 @@ export async function dependentSteps(intentId, commitId) {
   return rows.map((r) => r.seq);
 }
 
-export async function adjudicate({ commitId, intentId, usage }) {
+export async function adjudicate({ commitId, intentId, usage, tier = null }) {
   /*
    * PRE-FILTER: settle it with the graph when the graph can settle it.
    *
@@ -693,10 +693,13 @@ Ask only if the answer would change your verdict.`,
   }
 
   const res = await complete({
-    // Cheap tier by default: the graph has already narrowed this to a short
-    // yes/no over a candidate list. ADJUDICATOR_TIER=adjudicator restores the
-    // larger model when a workload needs it.
-    tier: process.env.ADJUDICATOR_TIER || "bulk",
+    // Precedence: what this caller asked for, then what this deployment is
+    // configured for, then cheap. Cheap is the right default because the
+    // provenance graph has already narrowed this to a short yes/no over a
+    // candidate list — but "these conflicts are subtle and I will pay for a
+    // better answer" is a legitimate thing for a caller to say, so the API
+    // takes `adjudicator` per request.
+    tier: tier || process.env.ADJUDICATOR_TIER || "bulk",
     system: ADJUDICATOR_SYSTEM,
     prompt: prompt + evidence,
     maxTokens: 500,
@@ -841,7 +844,7 @@ export async function resolve({ commitId, intentId, adjudication, detectedBy, di
  * Returns one record per threatened intent so the benchmark can count exactly
  * how much reasoning was preserved rather than discarded.
  */
-export async function processCommit(commitId, { usage } = {}) {
+export async function processCommit(commitId, { usage, tier = null } = {}) {
   const threatened = await findThreatened(commitId);
   const outcomes = [];
 
@@ -855,6 +858,7 @@ export async function processCommit(commitId, { usage } = {}) {
       commitId,
       intentId: t.intent_id,
       usage,
+      tier,
     });
 
     const { adjudicationId } = await resolve({
@@ -873,6 +877,10 @@ export async function processCommit(commitId, { usage } = {}) {
       distance: t.distance,
       verdict: adjudication.verdict,
       rationale: adjudication.rationale,
+      // Which model actually ruled. A caller who paid for a bigger tier should
+      // be able to confirm they got it, and a conflict settled by the
+      // provenance graph reports "provenance-graph" — no model, no charge.
+      model: adjudication.model,
       stepsTotal: adjudication.stepsTotal,
       // Not just how many, but which. A caller that knows only the count has to
       // redo everything anyway, which is the outcome this whole mechanism

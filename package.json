@@ -34,7 +34,8 @@
     "seed:corpus": "node scripts/seed-corpus.js",
     "example:langchain": "node sdk/example-langchain.js",
     "test:sdk": "node scripts/test-sdk.js",
-    "quickstart": "node scripts/quickstart.js"
+    "quickstart": "node scripts/quickstart.js",
+    "test:tiers": "node scripts/test-tiers.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",

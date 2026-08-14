@@ -46,6 +46,7 @@ export class InterlockCallback extends BaseCallbackHandler {
     statement,
     baseUrl,
     throwOnFatal = false,
+    adjudicator,
   } = {}) {
     super();
     this.client = new Interlock({ apiKey, baseUrl });
@@ -53,6 +54,8 @@ export class InterlockCallback extends BaseCallbackHandler {
     this.resources = resources;
     this.statement = statement;
     this.throwOnFatal = throwOnFatal;
+    /** Which model tier rules on conflicts. See Interlock#commit. */
+    this.adjudicator = adjudicator;
 
     /** Populated once a ruling arrives. */
     this.intentId = null;
@@ -162,7 +165,7 @@ export class InterlockCallback extends BaseCallbackHandler {
    * only your code knows which write is *the* write, and guessing would be
    * worse than asking.
    */
-  async commit({ resourceId, body, statement, expectedVersion }) {
+  async commit({ resourceId, body, statement, expectedVersion, adjudicator }) {
     // Never adjudicate against a half-recorded plan.
     await this.flush();
 
@@ -173,6 +176,7 @@ export class InterlockCallback extends BaseCallbackHandler {
       expectedVersion,
       body,
       statement: statement ?? this.statement ?? "Agent commit",
+      adjudicator: adjudicator ?? this.adjudicator,
     });
 
     const mine = (res?.adjudications ?? []).find((a) => a.intentId === this.intentId);

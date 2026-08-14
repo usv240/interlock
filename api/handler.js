@@ -37,6 +37,38 @@ import { createHash, randomUUID } from "node:crypto";
 /** Hard daily ceilings. Breaching either returns 429, never a surprise bill. */
 const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT ?? 400);
 const DAILY_USD_LIMIT = Number(process.env.DAILY_USD_LIMIT ?? 3);
+/**
+ * The ceiling across every tenant combined. Per-tenant limits bound one
+ * caller; this bounds all of them, which is the number that appears on a bill.
+ */
+const GLOBAL_USD_LIMIT = Number(process.env.GLOBAL_USD_LIMIT ?? 12);
+
+/**
+ * Model tiers a caller may select for adjudication.
+ *
+ * Named by role rather than by model id. A caller asking for "a bigger model
+ * because these conflicts are subtle" should not have to know that today that
+ * means Sonnet, nor should their code break when it means something else. The
+ * embedding model is deliberately absent: it is not a choice, because a vector
+ * written by one model and searched by another is meaningless.
+ */
+const ADJUDICATOR_TIERS = ["bulk", "adjudicator"];
+
+/**
+ * `escalate` (Opus) is defined in agents/bedrock.js and deliberately NOT here.
+ *
+ * The runtime role grants Haiku, Sonnet and Titan and nothing else, so asking
+ * for Opus returns an IAM denial as a 500 — which is exactly what happened the
+ * first time this list included it. Publishing a tier that cannot be served is
+ * worse than not offering it: the caller reads the menu, orders, and gets an
+ * internal error with our account id in the message.
+ *
+ * Not granting it is also the right call on merit. Adjudication is a short
+ * yes/no over a candidate list the provenance graph has already narrowed, and
+ * the benchmark says the cheap tier handles it — paying 5x per input token for
+ * that is the waste this project exists to argue against. If a workload ever
+ * needs it, the grant and this list have to change together.
+ */
 /** Single switch to take the endpoint down without a redeploy. */
 const ENABLED = process.env.API_ENABLED !== "0";
 
@@ -125,6 +157,39 @@ async function reserveQuota(bucket, limits = {}) {
     { label: "reserveQuota" },
   );
   return result;
+}
+
+/**
+ * The ceiling that actually stops the bill.
+ *
+ * WHY THIS EXISTS
+ * Every paid request was metered against its own bucket — `tenant:<id>` for a
+ * keyed caller, the IP hash for an anonymous one — and every tenant gets 2,000
+ * calls and $5 a day. Nothing ever checked the sum. `recordSpend` has always
+ * written a `global` row and /v1/health has always displayed it, which made it
+ * look supervised; nothing read it back to refuse anything. Twenty tenants
+ * could spend $100 in a day, and the honest answer to "what stops that" was
+ * "nobody has signed up yet".
+ *
+ * That is exactly the failure this project is about: a check that appears to
+ * exist, reads as authoritative, and never fires.
+ *
+ * Read-only and outside the reservation, deliberately. Spend is recorded after
+ * a call completes, so the global figure always lags by one request — trying to
+ * make it exact would mean reserving an estimate before knowing the cost. The
+ * ceiling only needs to stop the *next* call once the total is already past it.
+ */
+async function assertGlobalBudget() {
+  const { rows } = await query(
+    `SELECT usd_micros FROM api_quota
+     WHERE day = current_date() AND bucket = 'global'`,
+  );
+  const usd = Number(rows[0]?.usd_micros ?? 0) / 1e6;
+  return {
+    ok: usd < GLOBAL_USD_LIMIT,
+    usd,
+    limit: GLOBAL_USD_LIMIT,
+  };
 }
 
 async function recordSpend(bucket, usage) {
@@ -429,10 +494,30 @@ async function bufferedHandler(event) {
           timeTravelReach: pre.reach,
         },
         quota: {
+          // Anonymous allowance. A key raises these; see /v1/keys.
           callsToday: Number(rows[0]?.calls ?? 0),
           callLimit: DAILY_CALL_LIMIT,
           usdToday: Number(rows[0]?.usd_micros ?? 0) / 1e6,
           usdLimit: DAILY_USD_LIMIT,
+          // The ceiling across every tenant combined — the one that actually
+          // bounds the bill, and the one that refuses you even with budget left.
+          globalUsdToday: Number(rows[0]?.usd_micros ?? 0) / 1e6,
+          globalUsdLimit: GLOBAL_USD_LIMIT,
+        },
+        /**
+         * Which model arbitrates, and what a caller may ask for.
+         *
+         * Published so the choice is discoverable rather than folded into a
+         * paragraph of docs — an agent wiring this up can read the tiers at
+         * runtime instead of hard-coding a name that may move.
+         */
+        adjudicators: {
+          default: process.env.ADJUDICATOR_TIER || "bulk",
+          available: ADJUDICATOR_TIERS,
+          note:
+            "Pass `adjudicator` on POST /v1/commits to override per request. " +
+            "Cheaper tiers are the default because the provenance graph has " +
+            "already narrowed the question before a model sees it.",
         },
         endpoints: [
           "GET  /v1/health",
@@ -536,6 +621,23 @@ async function bufferedHandler(event) {
 
     // Authenticated callers are metered against their own tenant; anonymous
     // ones share a per-IP bucket in the public tenant.
+    // Everyone's spend together, before this caller's own allowance. Checked
+    // first because a tenant with budget left is still refused when the service
+    // as a whole is out — that is what makes it a ceiling rather than a display.
+    const global = await assertGlobalBudget();
+    if (!global.ok) {
+      await logRequest(path, hash, 429, Date.now() - started, 0, {
+        reason: "global spend limit",
+      });
+      return json(429, {
+        ok: false,
+        error:
+          `The service has spent its daily inference budget ` +
+          `($${global.usd.toFixed(2)} of $${global.limit}). It resets at ` +
+          `midnight UTC. GET /v1/health and POST /v1/keys still work.`,
+      });
+    }
+
     const bucket = caller.authenticated ? `tenant:${caller.tenantId}` : hash;
     const quota = await reserveQuota(bucket, caller);
     if (!quota.allowed) {
@@ -669,6 +771,19 @@ async function bufferedHandler(event) {
           error: "agentId, resourceId and statement are required",
         });
       }
+      // Which model rules on the conflicts this commit causes.
+      //
+      // Rejected loudly rather than silently falling back to the default: a
+      // caller who asked for the big model on a subtle conflict and quietly got
+      // the cheap one has been given a wrong answer with no way to notice.
+      const tier = b.adjudicator ?? null;
+      if (tier !== null && !ADJUDICATOR_TIERS.includes(tier)) {
+        return json(400, {
+          ok: false,
+          error: `Unknown adjudicator "${tier}". Available: ${ADJUDICATOR_TIERS.join(", ")}.`,
+        });
+      }
+
       const usage = new Usage("api");
       const commit = await commitResource({
         agentId: b.agentId,
@@ -683,7 +798,7 @@ async function bufferedHandler(event) {
         await recordSpend(bucket, usage);
         return json(409, { ok: false, conflict: true, ...commit });
       }
-      const outcomes = await processCommit(commit.commit.id, { usage });
+      const outcomes = await processCommit(commit.commit.id, { usage, tier });
       await recordSpend(bucket, usage);
       await logRequest(path, hash, 200, Date.now() - started, usage.tokensTotal);
       return json(200, {

@@ -70,8 +70,13 @@ export class Interlock {
           body: body === undefined ? undefined : JSON.stringify(body),
         });
       } catch (e) {
-        lastError = new InterlockError(`Network error: ${e.message}`, { retryable: true });
-        if (attempt === this.maxRetries) throw lastError;
+        // Same rule as for 5xx below. A fetch that throws cannot tell you
+        // whether the server saw the request, so replaying a mutation is a
+        // guess about which of two very different things happened.
+        lastError = new InterlockError(`Network error: ${e.message}`, {
+          retryable: method === "GET",
+        });
+        if (method !== "GET" || attempt === this.maxRetries) throw lastError;
         await sleep(backoff(attempt));
         continue;
       }
@@ -85,7 +90,24 @@ export class Interlock {
         await sleep(backoff(attempt)); // platform throttle
         continue;
       }
-      if (res.status >= 500 && attempt < this.maxRetries) {
+
+      /*
+       * A 5xx is only safe to retry when the call could not have changed
+       * anything.
+       *
+       * This used to retry every 5xx, and it produced precisely the anomaly
+       * this library exists to prevent. A commit whose write landed and whose
+       * *adjudication* then failed returned 500 — so the client sent it again,
+       * the version guard saw the write it had itself just made, and reported a
+       * 409 "someone else moved this row". The real error was swallowed, and
+       * the caller was told a lie about why.
+       *
+       * Only GET is retried. The mutating routes are not idempotent — there is
+       * no request id to deduplicate on — so a failed POST is the caller's to
+       * decide about, with the actual error in hand.
+       */
+      const idempotent = method === "GET";
+      if (res.status >= 500 && idempotent && attempt < this.maxRetries) {
         await sleep(backoff(attempt));
         continue;
       }
@@ -160,11 +182,33 @@ export class Interlock {
    *
    * Returns `adjudications`: one ruling per agent this commit threatened.
    * A ruling of `invalidating` names exactly which of their steps to redo.
+   *
+   * `adjudicator` picks which model rules on those conflicts — "bulk" (default,
+   * cheapest), "adjudicator", or "escalate". Named by role, not by model id, so
+   * your code does not break when the id behind a role changes. Call `health()`
+   * to see what is available. Most conflicts never reach a model at all: the
+   * provenance graph settles them for free.
    */
-  commit({ agentId, intentId, resourceId, expectedVersion, body, statement }) {
+  commit({
+    agentId,
+    intentId,
+    resourceId,
+    expectedVersion,
+    body,
+    statement,
+    adjudicator,
+  }) {
     return this.#request("v1/commits", {
       method: "POST",
-      body: { agentId, intentId, resourceId, expectedVersion, body, statement },
+      body: {
+        agentId,
+        intentId,
+        resourceId,
+        expectedVersion,
+        body,
+        statement,
+        adjudicator,
+      },
     });
   }
 
