@@ -142,9 +142,14 @@ export default function Crossover() {
                 strokeWidth="1"
                 strokeDasharray="4 4"
               />
+              {/* Sat at PAD.top + 16, which is exactly where the first data
+                  point's value label lands — the leftmost point is also the
+                  highest one, so the region label and "3.57×" were printed over
+                  each other. Moved to the bottom of the shaded band, which is
+                  empty because both series are climbing away from it. */}
               <text
                 x={PAD.left + 8}
-                y={PAD.top + 16}
+                y={H - PAD.bottom - 12}
                 fontSize="11"
                 fill="var(--muted)"
               >

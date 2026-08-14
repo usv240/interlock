@@ -231,19 +231,30 @@ function DataTable({ rows }: { rows: Approach[] }) {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The four headline figures.
+ *
+ * Split out from the comparison charts so the crossover curve — which is the
+ * actual finding, losing region and all — can sit directly beneath them instead
+ * of after two more charts.
+ */
+export function BenchmarkTiles() {
+  return (
+    <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {KPIS.map((k) => (
+        <StatTile key={k.label} kpi={k} />
+      ))}
+    </div>
+  );
+}
+
 export default function Benchmark() {
   const [showTable, setShowTable] = useState(false);
 
   return (
-    <div className="mt-10">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {KPIS.map((k) => (
-          <StatTile key={k.label} kpi={k} />
-        ))}
-      </div>
-
-      <div className="mt-8 flex items-center justify-between gap-4">
-        <h3 className="text-lg font-semibold text-ink">
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-[15px] font-semibold text-ink">
           Three ways to handle a conflict
         </h3>
         <button

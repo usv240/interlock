@@ -1,5 +1,5 @@
 import Nav from "@/components/Nav";
-import Benchmark from "@/components/Benchmark";
+import Benchmark, { BenchmarkTiles } from "@/components/Benchmark";
 import Crossover from "@/components/Crossover";
 import Verified from "@/components/Verified";
 import ArchitectureDiagram from "@/components/ArchitectureDiagram";
@@ -36,10 +36,23 @@ export default function Page() {
             title="Where this pays, and where it doesn't"
             lede="Every figure carries its provenance. Published means somebody else measured it and we cite them. Measured means our harness produced it on a live cluster, and you can re-run it."
           />
-          <Benchmark />
+          <BenchmarkTiles />
+
+          {/* The curve leads. It is the actual result — including the region
+              where this approach loses — and it used to sit below two bar charts
+              that compare the same three approaches at a single point on it. */}
           <div className="mt-4">
             <Crossover />
           </div>
+
+          <Disclosure
+            className="mt-4"
+            summary="Head-to-head against both baselines"
+            hint="throughput and token cost, at the top of the curve"
+          >
+            <Benchmark />
+          </Disclosure>
+
           <Verified />
         </Section>
         <Architecture />
