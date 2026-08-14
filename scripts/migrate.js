@@ -125,6 +125,23 @@ async function main() {
 
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
     const statements = splitStatements(sql);
+
+    // Every migration selects the database itself, because on a fresh cluster
+    // 001 has to create it first. That convention held until a file was written
+    // without the line and ran against `defaultdb` instead — where it failed
+    // with "relation does not exist", which reads like a broken migration
+    // rather than a misaddressed one.
+    //
+    // A convention that fails this confusingly should be checked, not trusted.
+    if (!/^\s*SET\s+database\s*=/im.test(sql)) {
+      console.log(bad(`  ${file} does not select a database`));
+      console.log(
+        `    Add "SET database = interlock;" near the top. Without it the file\n` +
+          `    runs against defaultdb and every table reference fails.`,
+      );
+      await client.end();
+      process.exit(1);
+    }
     console.log(`\n${dim("→")} ${file} ${dim(`(${statements.length} statements)`)}`);
 
     if (DRY) {

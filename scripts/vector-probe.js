@@ -37,9 +37,14 @@ const probeText = "rebalance the EU support queue for the overnight shift";
 const { literal } = await embed(probeText);
 
 console.log(`\n\x1b[1mQuery plan\x1b[0m ${dim(`ORDER BY embedding <=> '${probeText}'`)}`);
+// Asked with the predicate findThreatened uses. An unfiltered probe answers a
+// question nobody asks: measured on this cluster, the old full-table index was
+// selected with no WHERE clause and abandoned the moment one was added.
 const plan = await query(
   `EXPLAIN SELECT id FROM intent
-   WHERE embedding IS NOT NULL
+   WHERE tenant_id IS NOT DISTINCT FROM NULL
+     AND status IN ('open','threatened')
+     AND embedding IS NOT NULL
    ORDER BY embedding <=> $1::VECTOR
    LIMIT 5`,
   [literal],
@@ -52,14 +57,20 @@ console.log(
     .join("\n"),
 );
 
-const usesIndex = /intent_embedding_idx/.test(planText);
+// Matched on the plan operator rather than an index name. This probe looked for
+// `intent_embedding_idx` long after migration 007 renamed it, so it reported
+// "not selected" on every single run — including runs whose plan plainly showed
+// a vector search. That false negative was published as a caveat for a while.
+// A check that can only fail is not a check.
+const usesIndex = /vector search/.test(planText);
 console.log(
   usesIndex
-    ? ok("planner selected intent_embedding_idx")
+    ? ok("planner selected the vector index")
     : warn(
-        "planner did NOT select the vector index. At this row count a full scan\n" +
-          "  is genuinely cheaper, so this is correct behaviour rather than a failure -\n" +
-          "  but it means the index claim is unproven until the benchmark seeds volume.",
+        "planner did NOT select the vector index. The index covers in-flight plans\n" +
+          "  only, and below a few thousand of those a scan is genuinely cheaper - so\n" +
+          "  this is correct behaviour, not a failure. `npm run db:verify` forces the\n" +
+          "  index to prove it can still serve the query.",
       ),
 );
 

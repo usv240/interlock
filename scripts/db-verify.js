@@ -89,7 +89,7 @@ async function main() {
   await client.query(`
     INSERT INTO resource (kind, ext_key, body, version)
     VALUES ('probe', 'aost-probe', '{"state":"before"}'::JSONB, 1)
-    ON CONFLICT (kind, ext_key)
+    ON CONFLICT (tenant_id, kind, ext_key)
     DO UPDATE SET body = '{"state":"before"}'::JSONB, version = 1, updated_at = now()
   `);
 
@@ -144,13 +144,43 @@ async function main() {
 
   /* 4 — is the vector index actually used? ------------------------------ */
   console.log(head("4. C-SPANN vector index"));
+  // The predicate this asks with is the one findThreatened actually issues.
+  // Checking an unfiltered nearest-neighbour query instead would pass while the
+  // production path full-scanned, which is what happened: any WHERE clause sent
+  // the old full-table index to a scan, and the check never asked with one.
   const zeros = `[${Array(1024).fill(0).join(",")}]`;
+  const PRODUCTION_PREDICATE = `
+    WHERE tenant_id IS NOT DISTINCT FROM NULL
+      AND status IN ('open','threatened')
+      AND embedding IS NOT NULL`;
+
   const { rows: plan } = await client.query(
-    `EXPLAIN SELECT id FROM intent ORDER BY embedding <-> '${zeros}' LIMIT 5`,
+    `EXPLAIN SELECT id FROM intent ${PRODUCTION_PREDICATE}
+     ORDER BY embedding <=> '${zeros}' LIMIT 5`,
   );
   const planText = plan.map((r) => Object.values(r)[0]).join("\n");
-  const usesIndex = /intent_embedding_idx|vector/i.test(planText);
-  check(usesIndex, "planner selects the vector index for a nearest-neighbour scan");
+  const usesIndex = /vector search/i.test(planText);
+
+  const { rows: cnt } = await client.query(
+    `SELECT count(*)::INT8 AS live FROM intent
+     WHERE status IN ('open','threatened') AND embedding IS NOT NULL`,
+  );
+  const live = Number(cnt[0].live);
+
+  if (usesIndex) {
+    check(true, `planner selects the vector index (${live} plans in flight)`);
+  } else {
+    // Not a failure, and calling it one would be as dishonest as hiding it.
+    // The index covers only in-flight plans; below a few thousand of those a
+    // scan genuinely wins, and the planner picking it is the planner being
+    // right. The forced check below is what proves the index is alive.
+    console.log(
+      warn(
+        `planner prefers a scan at ${live} in-flight plans — correct at this ` +
+          `size; the forced check below proves the index can serve the query`,
+      ),
+    );
+  }
   console.log(
     dim(
       planText
@@ -160,6 +190,27 @@ async function main() {
         .map((l) => `   ${l}`)
         .join("\n"),
     ),
+  );
+
+  // Whether the planner picks it is a cost decision that changes with scale.
+  // Whether it *can* be picked is a correctness property, and it is the one
+  // that silently broke before: an index built with vector_l2_ops answered
+  // every cosine query with "index cannot be used", so it had never once been
+  // read. Forcing it is the only way to tell a resting index from a dead one.
+  let forcedError = null;
+  try {
+    await client.query(
+      `EXPLAIN SELECT id FROM intent@intent_live_embedding_idx ${PRODUCTION_PREDICATE}
+       ORDER BY embedding <=> '${zeros}' LIMIT 5`,
+    );
+  } catch (e) {
+    forcedError = e.message.split("\n")[0];
+  }
+  check(
+    forcedError === null,
+    forcedError
+      ? `index cannot serve a cosine query: ${forcedError}`
+      : "index serves the query when forced — resting, not dead",
   );
 
   /* summary ------------------------------------------------------------- */

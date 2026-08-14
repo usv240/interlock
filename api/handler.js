@@ -26,10 +26,11 @@ import {
   declareIntent,
   commitResource,
   processCommit,
+  appendSteps,
 } from "../agents/interlock.js";
 import { preflight } from "../agents/continuity.js";
 import { runStreamingDemo } from "./stream.js";
-import { resolveCaller, issueKey } from "../agents/auth.js";
+import { resolveCaller, issueKey, ensureTenantAgent } from "../agents/auth.js";
 import { handleChangefeed } from "./cdc.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -422,6 +423,8 @@ async function bufferedHandler(event) {
           "POST /v1/keys           (self-serve, key shown once)",
           "POST /v1/demo",
           "POST /v1/demo/stream   (ndjson, shows the working)",
+          "POST /v1/agents          (register an agent)",
+          "POST /v1/resources       (register shared state)",
           "POST /v1/intents",
           "POST /v1/commits",
           "GET  /v1/adjudications",
@@ -529,6 +532,87 @@ async function bufferedHandler(event) {
         preserved: body.summary.stepsPreserved,
       });
       return json(200, { ...body, quota: { callsLeft: quota.callsLeft } });
+    }
+
+    /* --- register an agent -------------------------------------------------
+     *
+     * Every other endpoint takes an agentId, and until now there was no way for
+     * an external tenant to obtain one — a gap that only became obvious when we
+     * wrote the SDK and could not make the example work without reaching into
+     * the database. Building the client is what found it.
+     *
+     * Idempotent by (tenant, name), so a fleet can call this on every boot
+     * without accumulating duplicate agents.
+     */
+    if (path === "/v1/agents" && method === "POST") {
+      const b = JSON.parse(event.body || "{}");
+      if (!b.name) {
+        return json(400, { ok: false, error: "name is required" });
+      }
+
+      const agentId = await ensureTenantAgent(
+        caller.tenantId,
+        String(b.name).slice(0, 80),
+        String(b.role ?? "agent").slice(0, 40),
+      );
+
+      await logRequest(path, hash, 200, Date.now() - started, 0);
+      return json(200, {
+        ok: true,
+        agent: { id: agentId, name: b.name, tenant: caller.tenantSlug },
+      });
+    }
+
+    /* --- append steps to an open intent ------------------------------------
+     * For framework agents whose plan is only known as it unfolds.
+     */
+    if (path === "/v1/intents/steps" && method === "POST") {
+      const b = JSON.parse(event.body || "{}");
+      if (!b.intentId) return json(400, { ok: false, error: "intentId is required" });
+
+      // The intent must belong to the caller's tenant. Without this check a key
+      // could graft steps onto a stranger's plan and steer their adjudication.
+      const { rows: own } = await query(
+        `SELECT i.id FROM intent i
+         JOIN agent a ON a.id = i.agent_id
+         WHERE i.id = $1 AND a.tenant_id IS NOT DISTINCT FROM $2`,
+        [b.intentId, caller.tenantId],
+      );
+      if (!own[0]) return json(404, { ok: false, error: "intent not found" });
+
+      const usage = new Usage("api-steps");
+      const res = await appendSteps({
+        intentId: b.intentId,
+        steps: (b.steps ?? []).slice(0, 50),
+        usage,
+      });
+
+      await logRequest(path, hash, 200, Date.now() - started, usage.tokensTotal);
+      return json(200, { ok: true, ...res });
+    }
+
+    /* --- register a resource ---------------------------------------------
+     * The shared state agents contend over. Same idempotency reasoning.
+     */
+    if (path === "/v1/resources" && method === "POST") {
+      const b = JSON.parse(event.body || "{}");
+      if (!b.key) return json(400, { ok: false, error: "key is required" });
+
+      const { rows } = await query(
+        `INSERT INTO resource (tenant_id, kind, ext_key, body)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tenant_id, kind, ext_key) DO UPDATE SET updated_at = now()
+         RETURNING id, version, body`,
+        [
+          caller.tenantId,
+          String(b.kind ?? "resource").slice(0, 40),
+          String(b.key).slice(0, 120),
+          JSON.stringify(b.body ?? {}),
+        ],
+      );
+
+      await logRequest(path, hash, 200, Date.now() - started, 0);
+      return json(200, { ok: true, resource: rows[0] });
     }
 
     if (path === "/v1/intents" && method === "POST") {

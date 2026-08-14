@@ -6467,6 +6467,10 @@ async function processCommit(commitId, { usage } = {}) {
       verdict: adjudication.verdict,
       rationale: adjudication.rationale,
       stepsTotal: adjudication.stepsTotal,
+      // Not just how many, but which. A caller that knows only the count has to
+      // redo everything anyway, which is the outcome this whole mechanism
+      // exists to avoid.
+      affectedSteps: adjudication.affectedSteps,
       stepsRepaired: adjudication.affectedSteps.length,
       stepsPreserved: adjudication.stepsTotal - adjudication.affectedSteps.length
     });

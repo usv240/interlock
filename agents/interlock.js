@@ -145,6 +145,89 @@ export async function declareIntent({
   return result;
 }
 
+/**
+ * Append steps to an intent that is already open.
+ *
+ * WHY THIS EXISTS
+ * `declareIntent` assumes the plan is known when the task begins. For a
+ * hand-written agent that is fair. For a framework agent it is not: LangChain
+ * fires its chain-start callback before a single tool has run, so a callback
+ * that declared everything up front would declare an empty plan — and an intent
+ * with no steps has no provenance edges, so every conflict against it resolves
+ * to "irrelevant" by the graph pre-filter. Correct machinery, wrong answer,
+ * and silently: the ruling looks confident.
+ *
+ * So steps accrue as they happen. The intent is still declared before the agent
+ * acts, which is the guarantee that matters; only the detail arrives late.
+ *
+ * `seq` continues from whatever is already stored rather than restarting, and
+ * the chain edge is drawn from the real predecessor, so a plan built across
+ * several calls has the same provenance shape as one declared in a single shot.
+ */
+export async function appendSteps({ intentId, steps = [], usage, embedSteps = process.env.EMBED_PLAN_STEPS === "1" }) {
+  if (steps.length === 0) return { added: 0, stepIds: [] };
+
+  const stepVectors = [];
+  if (embedSteps) {
+    for (const s of steps) {
+      const { literal } = await embed(s.description, usage);
+      stepVectors.push(literal);
+    }
+  }
+
+  const { result } = await serializableTx(
+    async (client) => {
+      // The tail of the existing plan, so numbering and the chain edge continue
+      // rather than fork. Read inside the transaction: two callbacks racing to
+      // append would otherwise both claim the same seq.
+      const { rows: tail } = await client.query(
+        `SELECT id, seq FROM plan_step WHERE intent_id = $1 ORDER BY seq DESC LIMIT 1`,
+        [intentId],
+      );
+
+      let prevId = tail[0]?.id ?? null;
+      let seq = tail[0] ? Number(tail[0].seq) + 1 : 0;
+      const stepIds = [];
+
+      for (const [i, s] of steps.entries()) {
+        const { rows: sr } = await client.query(
+          `INSERT INTO plan_step (intent_id, seq, description, embedding, tokens_used)
+           VALUES ($1, $2, $3, $4::VECTOR, $5)
+           RETURNING id`,
+          [intentId, seq, s.description, stepVectors[i], s.tokensUsed ?? 0],
+        );
+        const id = sr[0].id;
+        stepIds.push(id);
+
+        for (const resourceId of s.dependsOn ?? []) {
+          await client.query(
+            `INSERT INTO provenance_edge (from_kind, from_id, to_kind, to_id)
+             VALUES ('resource', $1, 'step', $2)
+             ON CONFLICT DO NOTHING`,
+            [resourceId, id],
+          );
+        }
+        if (prevId) {
+          await client.query(
+            `INSERT INTO provenance_edge (from_kind, from_id, to_kind, to_id)
+             VALUES ('step', $1, 'step', $2)
+             ON CONFLICT DO NOTHING`,
+            [prevId, id],
+          );
+        }
+
+        prevId = id;
+        seq += 1;
+      }
+
+      return { added: steps.length, stepIds };
+    },
+    { label: "appendSteps" },
+  );
+
+  return result;
+}
+
 /* ========================================================================== */
 /* Committing a change to shared state                                        */
 /* ========================================================================== */
@@ -791,6 +874,10 @@ export async function processCommit(commitId, { usage } = {}) {
       verdict: adjudication.verdict,
       rationale: adjudication.rationale,
       stepsTotal: adjudication.stepsTotal,
+      // Not just how many, but which. A caller that knows only the count has to
+      // redo everything anyway, which is the outcome this whole mechanism
+      // exists to avoid.
+      affectedSteps: adjudication.affectedSteps,
       stepsRepaired: adjudication.affectedSteps.length,
       stepsPreserved: adjudication.stepsTotal - adjudication.affectedSteps.length,
     });

@@ -198,8 +198,66 @@ npm run demo          # end-to-end walkthrough of the mechanism
 | `npm run bench` | Four modes, one workload |
 | `npm run bench:sweep` | The crossover curve |
 | `npm run chaos` | Connection-severing resilience drill |
+| `npm run test:sdk` | 12 contract checks against the live endpoint |
+| `npm run example:langchain` | Two LangChain agents contending over one queue |
 
 Frontend: `cd web && npm install && npm run dev`
+
+---
+
+## Using it from your own agents
+
+INTERLOCK is a service, not a framework. Your agents keep their own models, prompts and tools; it arbitrates the shared state and nothing else.
+
+```js
+import { Interlock } from "./sdk/client.js";
+
+const { key } = await Interlock.issueKey({ name: "My Fleet" });
+const il = new Interlock({ apiKey: key });
+
+const agent = await il.registerAgent({ name: "Scheduler" });
+const queue = await il.registerResource({ key: "support-eu", body: { depth: 118 } });
+
+// 1. say what you are about to do, before you do it
+const { intent } = await il.declare({
+  agentId: agent.id,
+  statement: "Rebalance the EU queue and page a second responder.",
+  reads: [{ resourceId: queue.id, observedVersion: queue.version }],
+});
+
+// 2. commit through us
+const { adjudications } = await il.commit({
+  agentId: agent.id,
+  intentId: intent.id,
+  resourceId: queue.id,
+  body: { depth: 131 },
+  statement: "Depth rose to 131.",
+});
+
+// 3. act on the ruling — it names which steps died, not just that something did
+for (const a of adjudications) {
+  if (a.verdict === "invalidating") redo(a.affectedSteps);
+}
+```
+
+The client is dependency-free `fetch`: Node, Deno, Bun, workers, browsers.
+
+### LangChain
+
+A LangChain agent already tells its callbacks what it is about to do. That is precisely what INTERLOCK needs, so the integration is a callback rather than a rewrite:
+
+```js
+import { InterlockCallback } from "./sdk/langchain.js";
+
+const guard = new InterlockCallback({ apiKey, agentId, resources });
+await executor.invoke(input, { callbacks: [guard] });
+
+if (guard.wasInvalidated) redo(guard.stepsToRedo);
+```
+
+Tool calls are recorded as plan steps as they happen, which is what lets a conflict be repaired at step granularity instead of throwing the task away. Run `npm run example:langchain` to watch two agents contend over one queue.
+
+If declaring fails, the callback warns and lets the run continue. A guard that breaks the run it is guarding is worse than no guard.
 
 ---
 
@@ -209,7 +267,7 @@ Stated here rather than buried, because a reproducible benchmark is only a stren
 
 1. **INTERLOCK loses below the crossover.** Around 3.3k tokens of reasoning per task it costs 3.57× against optimistic concurrency's 2.04×. That is a real result and it is published above rather than tuned away.
 2. **The workload's dependency fraction and pass count are parameters we chose.** The first version had every step depend on the contended value — the worst possible case, and unrepresentative. Both are now explicit and swept, but they are still our choices, and the whole curve including the losing region is published so the choice is inspectable.
-3. **The vector index is not always selected by the planner.** At small row counts a full scan is genuinely cheaper, and CockroachDB correctly prefers it. `npm run ai:vector` prints the plan either way rather than asserting.
+3. **The vector index is not always selected by the planner.** It is a *partial* index covering only plans currently in flight — 9 rows against 1,752 intents — because semantic detection never asks about resolved plans. Below a few thousand live plans a scan genuinely wins and CockroachDB correctly prefers it. `npm run ai:vector` prints the plan either way, and `npm run db:verify` additionally forces the index, which is the only way to tell an index that is resting from one that is dead. We have had both: the index was built for L2 while every query asked in cosine (migration 007), and then, once fixed, it was selected only for unfiltered queries that nothing in this system runs (migration 010).
 4. **We cannot take down a managed region.** See the chaos drill section for exactly which half of the guarantee is tested here.
 5. **Energy figures are estimates.** A single coefficient (Wh per 1k tokens) is applied uniformly to every mode. The absolute number may be wrong; the *comparison* stays valid because every mode is multiplied by the same figure. Override with `ENERGY_WH_PER_1K_TOKENS`.
 

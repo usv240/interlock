@@ -47,7 +47,7 @@ async function upsertResource(kind, key, body) {
   const { rows } = await query(
     `INSERT INTO resource (kind, ext_key, body)
      VALUES ($1,$2,$3)
-     ON CONFLICT (kind, ext_key)
+     ON CONFLICT (tenant_id, kind, ext_key)
      DO UPDATE SET body = EXCLUDED.body, version = resource.version + 1, updated_at = now()
      RETURNING id, version`,
     [kind, key, body],

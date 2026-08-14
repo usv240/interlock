@@ -31,7 +31,9 @@
     "pipeline": "node scripts/pipeline-status.js",
     "test:stranger": "node scripts/test-as-stranger.js",
     "sync:env": "node scripts/sync-lambda-env.js",
-    "seed:corpus": "node scripts/seed-corpus.js"
+    "seed:corpus": "node scripts/seed-corpus.js",
+    "example:langchain": "node sdk/example-langchain.js",
+    "test:sdk": "node scripts/test-sdk.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
@@ -41,6 +43,11 @@
   },
   "devDependencies": {
     "@aws-sdk/client-eventbridge": "^3.1109.0",
+    "@langchain/core": "^1.2.7",
     "esbuild": "^0.28.2"
+  },
+  "exports": {
+    ".": "./sdk/client.js",
+    "./langchain": "./sdk/langchain.js"
   }
 }
