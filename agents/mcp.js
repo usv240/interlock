@@ -132,6 +132,22 @@ export function formatRows(rows, columns) {
  * nothing.
  */
 export async function auditRecentConflicts({ limit = 5 } = {}) {
+  // NOTE: no follower read here, deliberately.
+  //
+  // `AS OF SYSTEM TIME follower_read_timestamp()` would be the right choice for
+  // an auditor — history a few seconds stale is exactly the trade an
+  // investigation should make, and it keeps a console someone left open off the
+  // leaseholder that live adjudication depends on.
+  //
+  // The managed MCP server rejects it:
+  //
+  //   inconsistent AS OF SYSTEM TIME timestamp; expected: …, got: …
+  //
+  // It evaluates the expression separately from the statement it wraps, so a
+  // dynamically-computed timestamp cannot agree with itself across the two.
+  // Reported as feedback in docs/SUBMISSION.md. Our own connection has no such
+  // problem, so the API's audit feed does use follower reads.
+  //
   // Single line, no trailing semicolon: the server enforces exactly one
   // statement per call, which is part of how it stays safe by default.
   const query =

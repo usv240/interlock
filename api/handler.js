@@ -431,6 +431,14 @@ async function bufferedHandler(event) {
 
     /* --- recent rulings (read-only, no quota) ---------------------------- */
     if (path === "/v1/adjudications" && method === "GET") {
+      // Served as a FOLLOWER READ, from the nearest replica rather than the
+      // leaseholder.
+      //
+      // This is the audit feed: anyone may poll it, and history a few seconds
+      // stale is exactly the trade an investigation should make. Without this,
+      // a dashboard someone leaves open adds load to the leaseholder that live
+      // adjudication depends on — an investigation that degrades the thing
+      // being investigated.
       const { rows } = await query(
         `SELECT ag.name AS agent, a.verdict::STRING AS verdict, a.detected_by,
                 a.steps_repaired, a.steps_total, a.decided_at,
@@ -438,6 +446,7 @@ async function bufferedHandler(event) {
          FROM adjudication a
          JOIN intent i ON i.id = a.intent_id
          JOIN agent ag ON ag.id = i.agent_id
+         AS OF SYSTEM TIME follower_read_timestamp()
          ORDER BY a.decided_at DESC LIMIT 20`,
       );
       await logRequest(path, hash, 200, Date.now() - started, 0);

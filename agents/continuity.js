@@ -110,6 +110,36 @@ export async function timeTravelReach() {
   return reach;
 }
 
+/**
+ * The garbage-collection window, per table.
+ *
+ * This is the number that actually bounds `AS OF SYSTEM TIME`, and reading it
+ * turns "how far back can we reach?" from a probe that walks backwards until
+ * something breaks into a fact the cluster will simply tell you.
+ *
+ * Worth knowing: the default here is 4500s — 75 minutes — which is why the
+ * reach probe kept reporting about an hour. We had been loosely attributing
+ * that to table age.
+ */
+export async function gcWindows() {
+  const tables = ["intent", "commit_log", "adjudication", "resource"];
+  const out = [];
+  for (const t of tables) {
+    try {
+      const { rows } = await query(`SHOW ZONE CONFIGURATION FROM TABLE ${t}`);
+      const raw = rows[0]?.raw_config_sql ?? Object.values(rows[0] ?? {}).join(" ");
+      const m = /gc\.ttlseconds\s*=\s*(\d+)/.exec(raw);
+      out.push({ table: t, seconds: m ? Number(m[1]) : null });
+    } catch {
+      out.push({ table: t, seconds: null });
+    }
+  }
+  return out;
+}
+
+const humanise = (s) =>
+  s == null ? "unknown" : s >= 86400 ? `${(s / 86400).toFixed(0)}d` : s >= 3600 ? `${(s / 3600).toFixed(1)}h` : `${s}s`;
+
 export async function survivability() {
   const { rows: regions } = await query(`SHOW REGIONS FROM DATABASE interlock`);
   const { rows: db } = await query(
@@ -193,6 +223,12 @@ if (isMain) {
       ? ok(`time-travel reach: ${pre.reach} on a real table`)
       : warn("time-travel reach: none"),
   );
+
+  const gc = await gcWindows();
+  console.log(dim("        gc.ttlseconds — the ceiling on how far back a diff can read:"));
+  for (const g of gc) {
+    console.log(dim(`          ${g.table.padEnd(14)} ${humanise(g.seconds)}`));
+  }
 
   for (const f of pre.findings) {
     console.log(f.level === "fail" ? bad(f.msg) : warn(f.msg));

@@ -373,8 +373,8 @@ function Architecture() {
       use: "The human arbitration console. Read-only and audit-logged by default, which is exactly right for inspecting a live conflict without being able to make it worse.",
     },
     {
-      tool: "ccloud CLI",
-      use: "A continuity agent provisions regions, tunes the garbage-collection window that bounds time-travel reads, and snapshots before each adjudication.",
+      tool: "ccloud / Cloud control plane",
+      use: "A continuity agent that refuses to let adjudication run if resilience is not actually configured. It reads cluster state from the control plane, verifies three regions and a region-survival goal, and reports gc.ttlseconds per table — the real ceiling on how far back a diff can read, which turned out to be 75 minutes by default and is now a day on the decision tables.",
     },
     {
       tool: "Agent Skills Repo",
