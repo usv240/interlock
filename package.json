@@ -33,7 +33,8 @@
     "sync:env": "node scripts/sync-lambda-env.js",
     "seed:corpus": "node scripts/seed-corpus.js",
     "example:langchain": "node sdk/example-langchain.js",
-    "test:sdk": "node scripts/test-sdk.js"
+    "test:sdk": "node scripts/test-sdk.js",
+    "quickstart": "node scripts/quickstart.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",

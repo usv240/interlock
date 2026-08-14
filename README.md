@@ -198,10 +198,51 @@ npm run demo          # end-to-end walkthrough of the mechanism
 | `npm run bench` | Four modes, one workload |
 | `npm run bench:sweep` | The crossover curve |
 | `npm run chaos` | Connection-severing resilience drill |
+| `npm run quickstart` | The whole loop against the hosted API — no setup |
 | `npm run test:sdk` | 12 contract checks against the live endpoint |
 | `npm run example:langchain` | Two LangChain agents contending over one queue |
 
 Frontend: `cd web && npm install && npm run dev`
+
+---
+
+## Run it yourself
+
+There are two different things that can mean.
+
+### A. Use the hosted service (about a minute, nothing to configure)
+
+Needs Node and nothing else — no database, no AWS account, no `.env`.
+
+```bash
+git clone <this repo> && cd interlock && npm install
+npm run quickstart
+```
+
+That registers two agents, declares a plan, commits a conflicting change from
+the other agent, and prints the ruling — which steps died, which survived, and
+what the decision cost. It issues a throwaway key if you don't have one; pass
+your own to use your tenant:
+
+```bash
+npm run quickstart -- ilk_your_key_here
+```
+
+Then `npm run example:langchain` for the same thing driven by a LangChain
+callback, and `npm run test:sdk` for the 12 contract checks.
+
+### B. Run the whole stack on your own infrastructure
+
+Your own CockroachDB cluster, your own Bedrock access, your own Lambda. This is
+the path if you want to change the mechanism rather than call it. See
+[SETUP.md](SETUP.md) — roughly: create a free multi-region CockroachDB Cloud
+cluster, enable two Bedrock models, fill in `.env.local`, then
+
+```bash
+npm run db:migrate && npm run db:verify   # schema, then proof it does what we claim
+npm run demo                              # the mechanism end to end, locally
+npm run api:deploy && npm run deploy      # your own API and site
+```
 
 ---
 

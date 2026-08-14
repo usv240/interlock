@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { API_URL } from "@/lib/content";
+import { API_URL, REPO_URL } from "@/lib/content";
 import InfoButton from "./InfoButton";
 import GetKey from "./GetKey";
 import CodeBlock from "./CodeBlock";
@@ -8,6 +8,8 @@ const HEALTH_CMD = `curl -s ${API_URL}v1/health`;
 const DEMO_CMD =
   `curl -s -X POST ${API_URL}v1/demo \\\n` +
   `  -H 'content-type: application/json' -d '{}'`;
+const QUICKSTART_CMD = `git clone ${REPO_URL} && cd interlock && npm install
+npm run quickstart -- ilk_your_key_here`;
 const LANGCHAIN_SNIPPET = `import { InterlockCallback } from "interlock/langchain";
 
 const guard = new InterlockCallback({ apiKey, agentId, resources });
@@ -144,7 +146,7 @@ export default function UseIt() {
         <div className="h-full card p-5 sm:p-6">
           <h3 className="text-sm font-semibold text-ink">Start here</h3>
           <p className="mt-1 text-[13px] text-ink-2">
-            Three steps, about a minute. Nothing to install.
+            The first three take about a minute and need nothing but a terminal.
           </p>
 
           <ol className="mt-5 flex flex-col gap-5">
@@ -175,6 +177,18 @@ export default function UseIt() {
                 sits inside the detection query, not around it.
               </p>
               <GetKey />
+            </Step>
+
+            <Step n={4} title="Run the whole loop in one command">
+              <p className="mb-2.5 text-[13px] leading-relaxed text-ink-2">
+                Two agents, one queue, a real ruling — declared, contended and
+                adjudicated, printed step by step. Needs Node and nothing else:
+                no database, no AWS account, no configuration. Pass your key, or
+                leave it off and it issues a throwaway one.
+              </p>
+              <CodeBlock wrap copyText={QUICKSTART_CMD}>
+                {QUICKSTART_CMD}
+              </CodeBlock>
             </Step>
           </ol>
 
