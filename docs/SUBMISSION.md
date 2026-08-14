@@ -20,6 +20,15 @@ Paste-ready. Every number here is reproducible from the repo.
 | Video | *(paste after upload)* |
 | Licence | MIT — detected in the repo About panel |
 
+**Judges: three commands, no setup.** Node only — no database, no AWS account, no config.
+
+```bash
+git clone https://github.com/usv240/interlock && cd interlock && npm install
+npm run quickstart     # the whole loop against the live service, ~15s
+npm run compare        # two collisions priced with and without INTERLOCK
+npm run verify         # proves a key is authenticated, isolated and metered
+```
+
 ---
 
 ## Inspiration
@@ -44,51 +53,60 @@ INTERLOCK is optimistic concurrency where **validation is reasoning instead of a
 
 Correctness never rests on the model's judgement: the final write is a real `SERIALIZABLE` transaction, so a wrong ruling costs wasted work, not a lost update.
 
-It runs as a **public API with self-serve keys and tenant isolation** — point your own fleet at it.
+**It is a service, and it is not an inference proxy.** You keep your models, prompts, tools and framework; we never see your agent's reasoning. Self-serve keys, per-tenant isolation, a LangChain callback for fleets that already exist, and a dependency-free client for those that don't.
 
 ## How we built it
 
-**CockroachDB — all four tools, none decorative**
+**CockroachDB — all four tools, none decorative.** Swap the database and the mechanism stops functioning, rather than merely getting slower.
 
 | Tool | What the agent does with it |
 |---|---|
-| **Distributed Vector Indexing** | C-SPANN indexes over intent, commit and step embeddings. Detects plans threatened by meaning. Threshold **measured, not guessed** (`npm run ai:calibrate`) |
-| **Managed MCP Server** | Read-only, audit-logged auditor console. Investigation is inherently read-only, so safe-by-default is exactly right |
-| **ccloud / Cloud API** | A continuity agent that refuses to let a cascade run if the cluster is not actually configured to survive a region |
-| **Agent Skills** | Consumed for schema design; contributed `managing-long-running-agent-transactions` back, including the traps that cost us real time |
+| **Distributed Vector Indexing** | A **partial, tenant-prefixed** C-SPANN index over the intents *currently in flight* — because semantic detection never asks about resolved plans. At **1,717 live plans the planner selects it**; `npm run ai:vector` prints the plan and names the tenant it probed. Threshold **measured, not guessed** (`npm run ai:calibrate`) |
+| **Managed MCP Server** | Not a human console — a **read-only tool belt for the adjudicating agent**. Before ruling it may request one lookup: has this resource churned all morning, or is this the first change in an hour? The channel cannot express a mutation, and every lookup is audit-logged outside our own logging |
+| **ccloud / Cloud API** | A continuity agent that **refuses to let adjudication run** if the cluster is not actually configured to survive a region, and reports `gc.ttlseconds` per table — the real ceiling on how far back a diff can read |
+| **Agent Skills** | Consumed for schema and index design; contributed `managing-long-running-agent-transactions` back, including the traps that cost us real time |
 
-Plus **changefeeds**, **row-level TTL**, **`REGIONAL BY TABLE` localities**, and a **3-region `SURVIVE REGION FAILURE`** database.
+Plus **changefeeds**, **row-level TTL**, **recursive CTEs**, **follower reads** on the audit feed, **per-table `gc.ttlseconds`**, three distinct **localities** (`GLOBAL`, `REGIONAL BY TABLE IN PRIMARY REGION`, pinned), and a 3-region **`SURVIVE REGION FAILURE`** database. 10 migrations, 15 tables, 1,801 intents, 878 provenance edges, 73 tenants.
 
 **AWS — only what we actually run on**
 
-Bedrock (Titan embeddings + Claude across three tiers with cost-aware routing) · Lambda (public API + SQS worker) · EventBridge + SQS (async adjudication with DLQ) · S3 + CloudFront (static demo, private origin via OAC) · CloudWatch · IAM (five specific model ARNs, not `bedrock:*`).
+Bedrock (Titan embeddings + Claude, with **caller-selectable tiers** — `adjudicator: "bulk" | "adjudicator"`, named by role so client code survives model ids moving) · Lambda (public API + SQS worker, capped concurrency so the worker cannot starve the API) · EventBridge + SQS (async adjudication with DLQ) · S3 + CloudFront (private origin via OAC) · CloudWatch · IAM (specific model ARNs, not `bedrock:*`, with explicit denies on destroying evidence).
 
 We deliberately **removed** ECS Fargate from our claims — we designed for it and never wired it, and *"meaningfully integrated, not just initialized"* is a pass/fail rule.
 
 ## Challenges we ran into
 
-Four bugs found by measurement, all documented in the source:
+Every one of these was found by measurement and is documented in the source. The pattern that connects them is the one this product exists to attack: **a check that appears to exist, reads as authoritative, and never fires.**
 
 - **A cosine/L2 mismatch silently disabled semantic detection.** The threshold was scaled for cosine, the operator was L2. Real conflicts measure 0.52 in cosine and 1.02 in L2, so the vector path never once fired — and the "detected by both" label hid it.
-- **`INT8` arrives as a string** in node-postgres, so `version + 1` produced `"11"` from `"1"` — silently, with a plausible-looking result. The guard we added then threw on CockroachDB's own job IDs (~1.2e18); it now returns BigInt.
-- **Changefeeds do an initial scan by default**, so the first run re-adjudicated all of history: 22 batches, 25,000 tokens. Nothing broke, because the unique index made every replayed ruling a no-op — but it was real money on a no-op.
-- **`us.` inference profiles dispatch cross-region.** A least-privilege policy allowing only `us-east-1` model ARNs is denied naming `us-east-2`.
+- **The vector index was serving a query nobody runs.** Fixing the metric was necessary and not sufficient: *any* `WHERE` clause sent the production query to a full scan. Removing every filter selected the index. Migration 010 replaced it with a partial index whose predicate *is* the query's predicate.
+- **The corpus seeded to prove the index works was outside the index.** It was written with status `aborted` so it could never be adjudicated by accident — but the partial index covers only in-flight plans. 1,741 seeded rows, 20 in the index. Isolation never came from the status; it comes from the tenant filter inside the detection query.
+- **The global spend cap was decorative.** Every request was metered against its own tenant bucket and nothing checked the sum. `/v1/health` displayed a `global` figure that nothing ever read back to refuse anything. Now enforced across all tenants, checked *before* the caller's own allowance.
+- **Two CORS headers merged into one invalid one.** The function URL sets CORS and so did our handler, producing `access-control-allow-origin: *,https://…`. The preflight passed (function URLs answer `OPTIONS` themselves), `curl` passed, the SDK suite passed — only browsers failed, because CORS is enforced by browsers and nothing else. Every check we had was on the wrong side of it.
+- **Our own SDK manufactured a phantom conflict.** It retried a 5xx on a commit that had already applied; the retry hit the version guard, saw its own write, and reported "someone else moved this row". Retries are now GET-only.
+- **`INT8` arrives as a string** in node-postgres, so `version + 1` produced `"11"` from `"1"`. The guard we added then threw on CockroachDB's own job ids (~1.2e18); it now returns BigInt.
+- **Changefeeds do an initial scan by default**, so the first run re-adjudicated all of history: 22 batches, 25,000 tokens. Nothing broke — the unique index made every replay a no-op — but it was real money on a no-op.
+- **`us.` inference profiles dispatch cross-region.** A least-privilege policy allowing only `us-east-1` model ARNs is denied when the profile lands in `us-east-2`.
 
 ## Accomplishments we're proud of
 
-**We published where it loses.** Below ~15k tokens of reasoning per task, adjudicating costs more than retrying — so don't use this, just retry. That region is shaded on the chart rather than cropped out. Above it: **1.28× cost against optimistic concurrency's 2.01×**, with **zero lost updates at every point in every mode**.
+**We published where it loses.** Below the crossover, adjudicating costs more than retrying — so don't use this, just retry. That region is shaded on the chart rather than cropped out, and `npm run compare -- --reasoning 400` prints, in red, that INTERLOCK costs *more*. A demo that can only produce good news is not evidence.
 
-**Exactly-once is structural, not conventional.** A `UNIQUE (commit_id, intent_id)` index means a double-apply fails loudly. It survived a chaos drill that destroys every in-flight connection mid-adjudication — 12 kill waves, all four invariants held — and then paid for itself a second time by making SQS's at-least-once delivery safe with no extra code.
+**We publish the number that contradicts us.** Our own audit feed is ~70% `invalidating` while the page claims most conflicts are irrelevant. Both are true — every row in that feed came from a demo, a test or the benchmark, and all three construct a real conflict on purpose. `/v1/adjudications` returns that caveat *next to the counts*, so a judge who checks finds it already explained.
 
-**Tenant isolation is proven, not asserted.** `npm run test:isolation` runs two tenants whose intents measure **cosine distance 0.0000** — identical text the vector path would certainly have matched across tenants had the filter been outside the query.
+**Exactly-once is structural, not conventional.** A `UNIQUE (commit_id, intent_id)` index means a double-apply fails loudly. It survived a chaos drill that destroys every in-flight connection mid-adjudication — 12 kill waves, all four invariants held — then paid for itself again by making SQS's at-least-once delivery safe with no extra code.
+
+**Tenant isolation is proven, not asserted.** `npm run test:isolation` runs two tenants whose intents measure **cosine distance 0.0000** — identical text the vector path would certainly have matched across tenants had the filter been outside the query. `npm run verify` re-proves it on any key in fifteen seconds.
 
 ## What we learned
 
 The economics are the opposite of what the pitch assumed. Adjudication costs roughly a fixed amount per conflict; re-running a task costs in proportion to how much reasoning it discards. So the honest claim is a **regime**, not a win — and finding the crossover took three legitimate optimisations and one workload redesign, all published.
 
+The deeper lesson is the one in the bug list. Six of those nine were *silent*: the code ran, returned plausible results, and was wrong. That is exactly the failure mode an agent hits when the world moves underneath it — which is the whole thesis, arrived at the hard way, in our own build.
+
 ## What's next
 
-Step-level semantic matching (the plumbing exists, off by default because it costs more than it returns on the hot path); a first-class SDK; and adjudicator distillation, since the graph pre-filter already narrows the question far enough that a much smaller model should suffice.
+Bring-your-own-key, so a tenant can use their own model and their own bill — the honest ceiling on this today. Step-level semantic matching (the plumbing exists, off by default because it costs more than it returns on the hot path). Adjudicator distillation, since the graph pre-filter already narrows the question far enough that a much smaller model should suffice.
 
 ---
 
@@ -96,15 +114,16 @@ Step-level semantic matching (the plumbing exists, off by default because it cos
 
 | Criterion | Evidence |
 |---|---|
-| **Agentic Memory Design** | Memory as a concurrency substrate: intents, read-sets, provenance graph, embeddings, MVCC snapshots, bitemporal validity. 6 migrations, 14 tables, 3 vector indexes, 3-region topology |
-| **Technological Implementation** | Recursive CTE ⨝ ANN ⨝ time-travel in one serializable transaction; async pipeline with DLQ and partial-batch failure; 4 documented bug hunts |
-| **Real-World Impact** | Public API with self-serve keys and proven tenant isolation. Published crossover so adopters know when *not* to use it |
-| **Product Readiness** | 3 regions + `SURVIVE REGION FAILURE`; chaos drill; exactly-once by constraint; DB-backed spend ceiling; least-privilege IAM with explicit denies; credential rotation script; `npm run pipeline` health check |
-| **Creativity & Originality** | First open-source implementation of semantic concurrency control, benchmarked against the paper's own numbers |
+| **Agentic Memory Design** | Memory *is* the mechanism, not the storage: intents, read-sets, a recursive provenance graph, embeddings, MVCC snapshots, bitemporal validity. 10 migrations, 15 tables, 1,801 intents, **1,717 in-flight plans where the planner selects the vector index**, 3-region topology. Swap the database and the product stops existing |
+| **Technological Implementation** | Recursive CTE ⨝ ANN ⨝ time-travel in one serializable transaction; async pipeline with DLQ and partial-batch failure; 13 SDK contract tests and 14 stranger tests against the deployed endpoint; nine documented bug hunts, six of them silent failures |
+| **Real-World Impact** | Not "agent fleets" abstractly — **any system where an LLM writes to shared state**: coding agents touching one repo, ops automations touching one runbook, support bots touching one queue. Public API, self-serve keys, LangChain callback, and a published crossover so adopters know when *not* to use it |
+| **Product Readiness** | 3 regions + `SURVIVE REGION FAILURE`; chaos drill; exactly-once by constraint; **enforced** per-tenant *and* service-wide spend ceilings; least-privilege IAM with explicit denies; credential rotation with env sync; `npm run pipeline` health check; browser-level CORS regression harness |
+| **Creativity & Originality** | First open-source implementation of semantic concurrency control, benchmarked against the paper's own numbers. Two uses of CockroachDB we have not seen elsewhere: **MCP as the adjudicating agent's read-only tool belt**, and a **partial vector index scoped to the working set** rather than the archive |
 
 ## Feedback on the CockroachDB AI tools
 
 - The **managed MCP server accepting a service-account API key** as a bearer token — not just OAuth — is what made a headless auditor console possible. Worth documenting more prominently; the console only shows the OAuth flow.
-- `CREATE CHANGEFEED` defaulting to an **initial scan** is the correct default for replication and an expensive one for event-driven work. A louder warning in the docs would have saved us 25,000 tokens.
-- Vector index selection is (correctly) row-count dependent, which makes "is my index working?" hard to answer early. A `SHOW VECTOR INDEX` diagnostic would help.
+- **Follower reads fail through MCP** with `inconsistent AS OF SYSTEM TIME timestamp`, even though the same query works on a direct connection. We applied it to our own connection instead.
+- `CREATE CHANGEFEED` defaulting to an **initial scan** is the correct default for replication and an expensive one for event-driven work. A louder warning would have saved us 25,000 tokens.
+- **Vector index selection is invisible until it isn't.** Ours was unusable for two distinct reasons (wrong opclass, then a filter it could not serve) and both looked identical from the outside: a plan that quietly says `scan`. A `SHOW VECTOR INDEX` diagnostic, or an `EXPLAIN` hint saying *why* a vector index was rejected, would have saved days.
 - `ADD REGION IF NOT EXISTS` being idempotent while `SET PRIMARY REGION` is not made writing a re-runnable migration slightly awkward.
