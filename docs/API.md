@@ -54,7 +54,39 @@ curl -s -X POST $BASE/v1/agents \
 ```
 
 Or `npm run quickstart -- $KEY` from the repo, which does the whole loop and
-prints each stage.
+prints each stage. To check a key you already hold:
+
+```bash
+npm run verify -- ilk_your_key_here
+```
+
+That authenticates it, runs a real declare→commit→ruling, confirms a stranger
+cannot reach your intents, and confirms a garbage key is refused.
+
+### On Windows PowerShell, the curl above will not work
+
+`curl` in PowerShell is an **alias for `Invoke-WebRequest`**, which takes
+different flags entirely. Worse, the real `curl.exe` mangles a JSON body passed
+inline — single quotes, escaped quotes and `--%` all produce malformed JSON,
+because PowerShell rewrites the argument before curl sees it.
+
+Three things that do work:
+
+```powershell
+# 1. PowerShell's own client — simplest
+Invoke-RestMethod -Uri "$base/v1/keys" -Method Post `
+  -ContentType "application/json" -Body '{"name":"My Fleet"}'
+
+# 2. real curl.exe, with the body in a file
+'{"name":"My Fleet"}' | Set-Content -Encoding ascii body.json
+curl.exe -s -X POST "$base/v1/keys" -H "content-type: application/json" -d "@body.json"
+
+# 3. skip the shell entirely
+npm run quickstart
+```
+
+Git Bash, WSL and macOS/Linux run the `curl` commands in this document as
+written.
 
 ---
 
