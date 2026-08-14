@@ -109,7 +109,7 @@ export default function GetKey() {
         <button
           type="submit"
           disabled={state === "loading"}
-          className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-hairline-strong px-4 text-[13px] font-medium text-ink transition-colors hover:bg-surface-2 disabled:cursor-wait disabled:opacity-60"
+          className="btn btn-primary shrink-0 disabled:cursor-wait"
         >
           {state === "loading" ? "issuing…" : "Get an API key"}
         </button>

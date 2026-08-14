@@ -11,7 +11,7 @@ import { ProvenanceBadge } from "./ui";
 
 function StatTile({ kpi }: { kpi: (typeof KPIS)[number] }) {
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-5">
+    <div className="card p-5">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
           {kpi.label}
@@ -89,7 +89,7 @@ function Bars({ metric }: { metric: Metric }) {
   const baselinePct = (1 / metric.max) * 100;
 
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+    <div className="card p-5 sm:p-6">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="text-sm font-semibold text-ink">{metric.title}</h4>
@@ -181,7 +181,7 @@ function Bars({ metric }: { metric: Metric }) {
 
 function DataTable({ rows }: { rows: Approach[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-hairline bg-surface">
+    <div className="overflow-x-auto card">
       <table className="w-full min-w-[34rem] border-collapse text-left text-[13px]">
         <caption className="sr-only">
           Throughput, token cost and failure mode by concurrency-control

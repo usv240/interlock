@@ -83,7 +83,7 @@ function Arrow({
 
 export default function ArchitectureDiagram() {
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+    <div className="card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
           Two paths, separated on purpose

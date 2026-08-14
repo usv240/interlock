@@ -1,5 +1,25 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+/**
+ * Fonts are fetched at build time and served from our own origin, so the page
+ * makes no third-party request at runtime and renders identically offline.
+ *
+ * `display: swap` because a fallback in the right size beats invisible text:
+ * the page's whole argument is legible before the webfont lands.
+ */
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains",
+});
 
 export const metadata: Metadata = {
   title: "INTERLOCK — memory that lets parallel agents think without corrupting each other",
@@ -25,8 +45,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f9f9f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d0d0d" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f5f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f17" },
   ],
 };
 
@@ -37,7 +57,17 @@ export const viewport: Viewport = {
 const noFlashTheme = `
 (function () {
   try {
-    var stored = localStorage.getItem('interlock-theme');
+    // ?theme=light|dark pins the theme for this visit and sticks. Lets a
+    // specific look be linked to directly — for a screenshot, a walkthrough,
+    // or a reader on a machine whose OS setting is not the one being discussed.
+    var q = null;
+    try {
+      q = new URLSearchParams(window.location.search).get('theme');
+    } catch (e) {}
+    if (q !== 'light' && q !== 'dark') q = null;
+    if (q) localStorage.setItem('interlock-theme', q);
+
+    var stored = q || localStorage.getItem('interlock-theme');
     var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     var theme = stored || (prefersDark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
@@ -49,7 +79,11 @@ const noFlashTheme = `
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" suppressHydrationWarning className="h-full">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`h-full ${inter.variable} ${mono.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashTheme }} />
       </head>

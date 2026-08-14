@@ -208,7 +208,7 @@ export default function LiveDemo() {
   const stages = events.filter((e) => e.t === "stage");
 
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+    <div className="card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-xl">
           <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
@@ -232,7 +232,7 @@ export default function LiveDemo() {
           type="button"
           onClick={run}
           disabled={running}
-          className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+          className="btn btn-primary btn-lg shrink-0 disabled:cursor-wait"
         >
           {running ? (
             <>

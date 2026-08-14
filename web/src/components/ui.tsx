@@ -6,15 +6,24 @@ export function Section({
   id,
   children,
   className = "",
+  tone = "page",
 }: {
   id?: string;
   children: ReactNode;
   className?: string;
+  /**
+   * Alternating grounds give a long page rhythm. Without it, fourteen sections
+   * of identical background read as one undifferentiated scroll and the reader
+   * loses track of where an argument started.
+   */
+  tone?: "page" | "raised";
 }) {
   return (
     <section
       id={id}
-      className={`border-t border-hairline px-5 py-16 sm:px-8 sm:py-20 lg:py-24 ${className}`}
+      className={`border-t border-hairline px-5 py-16 sm:px-8 sm:py-20 lg:py-24 ${
+        tone === "raised" ? "bg-page-2" : ""
+      } ${className}`}
     >
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </section>
@@ -34,12 +43,23 @@ export function SectionHead({
 }) {
   return (
     <header className="max-w-3xl">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+      <p className="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span
+          className="h-px w-6 bg-accent/50"
+          aria-hidden="true"
+        />
         {eyebrow}
       </p>
-      <h2 className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+      {/* Not a flex row: as a flex item the heading text wraps as one block and
+          pushes the info button onto a line of its own, which reads as a stray
+          orphan under the title. Inline-block keeps it beside the last word. */}
+      <h2 className="mt-3.5 text-[1.625rem] font-semibold text-balance text-ink sm:text-[2.125rem]">
         {title}
-        {info && <InfoButton {...info} />}
+        {info && (
+          <span className="ml-2 inline-block translate-y-[-0.15em] align-middle">
+            <InfoButton {...info} />
+          </span>
+        )}
       </h2>
       {lede && (
         <p className="mt-4 text-base leading-relaxed text-ink-2 sm:text-[17px]">
@@ -53,13 +73,21 @@ export function SectionHead({
 export function Card({
   children,
   className = "",
+  interactive = false,
+  accent = false,
 }: {
   children: ReactNode;
   className?: string;
+  /** Lifts on hover. Only for cards that actually do something when clicked. */
+  interactive?: boolean;
+  /** A lit hairline along the top edge, for the one card that carries the point. */
+  accent?: boolean;
 }) {
   return (
     <div
-      className={`rounded-xl border border-hairline bg-surface p-5 sm:p-6 ${className}`}
+      className={`card p-5 sm:p-6 ${interactive ? "card-interactive" : ""} ${
+        accent ? "card-accent" : ""
+      } ${className}`}
     >
       {children}
     </div>

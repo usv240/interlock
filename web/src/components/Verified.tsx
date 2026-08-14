@@ -11,7 +11,7 @@ import InfoButton from "./InfoButton";
  */
 export default function Verified() {
   return (
-    <div className="mt-10 overflow-hidden rounded-xl border border-hairline bg-surface">
+    <div className="mt-10 overflow-hidden card">
       <div className="flex items-center gap-2 border-b border-hairline px-5 py-4 sm:px-6">
         <h3 className="text-sm font-semibold text-ink">
           Verified against the live cluster

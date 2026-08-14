@@ -4,6 +4,7 @@ import Crossover from "@/components/Crossover";
 import Verified from "@/components/Verified";
 import ArchitectureDiagram from "@/components/ArchitectureDiagram";
 import LiveDemo from "@/components/LiveDemo";
+import HeroVisual from "@/components/HeroVisual";
 import UseIt from "@/components/UseIt";
 import InfoButton from "@/components/InfoButton";
 import { Card, Pill, Section, SectionHead } from "@/components/ui";
@@ -29,7 +30,7 @@ export default function Page() {
         <PriorArt />
         <Mechanism />
         <WhyCockroachDB />
-        <Section id="benchmark">
+        <Section id="benchmark" tone="raised">
           <SectionHead
             eyebrow="Benchmark"
             title="Where this pays, and where it doesn't"
@@ -42,7 +43,7 @@ export default function Page() {
           <Verified />
         </Section>
         <Architecture />
-        <Section id="use-it">
+        <Section id="use-it" tone="raised">
           <SectionHead
             eyebrow="Use it"
             title="It's a service, not just a demo"
@@ -61,52 +62,82 @@ export default function Page() {
 
 function Hero() {
   return (
-    <section id="top" className="px-5 pb-16 pt-16 sm:px-8 sm:pb-20 sm:pt-24">
-      <div className="mx-auto w-full max-w-6xl">
-        <div className="inline-flex items-center gap-2 rounded-full border border-hairline bg-surface px-3 py-1 text-[11px] text-ink-2">
-          <span
-            className="h-1.5 w-1.5 rounded-full bg-accent"
-            aria-hidden="true"
-          />
+    <section
+      id="top"
+      className="relative overflow-hidden px-5 pb-16 pt-14 sm:px-8 sm:pb-20 sm:pt-20"
+    >
+      {/* Ambient field. Decorative only, and behind everything. */}
+      <div className="gridlines" aria-hidden="true" />
+      <div className="aura" aria-hidden="true" />
+
+      <div className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-12">
+        <div>
+        <div className="rise pill">
+          <span className="pill-dot pill-dot-live" aria-hidden="true" />
           CockroachDB × AWS — Build with Agentic Memory
         </div>
 
-        <h1 className="mt-6 max-w-4xl text-3xl font-semibold leading-[1.15] tracking-tight text-ink sm:text-5xl lg:text-6xl">
-          Agent memory that lets parallel agents think for 40 seconds without
-          corrupting each other&rsquo;s work.
+        <h1
+          className="rise mt-7 text-[2rem] font-semibold leading-[1.08] text-ink sm:text-[3rem] lg:text-[3.5rem]"
+          style={{ animationDelay: "60ms" }}
+        >
+          Parallel agents that think for forty seconds{" "}
+          <span className="text-gradient">without corrupting each other.</span>
         </h1>
 
-        <p className="mt-6 max-w-2xl text-base leading-relaxed text-ink-2 sm:text-lg">
+        <p
+          className="rise mt-6 max-w-xl text-base leading-relaxed text-ink-2 sm:text-lg"
+          style={{ animationDelay: "120ms" }}
+        >
           An LLM agent reads shared memory, thinks for forty seconds, then acts.
           The world changed while it was thinking. Today you get two bad options:
           lock everything, or throw the thinking away. INTERLOCK adds a third.
         </p>
 
-        <div className="mt-9 flex flex-wrap items-center gap-3">
-          <a
-            href="#mechanism"
-            className="inline-flex h-11 items-center rounded-lg bg-accent px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            How it works
+        <div
+          className="rise mt-9 flex flex-wrap items-center gap-3"
+          style={{ animationDelay: "180ms" }}
+        >
+          {/* The primary action is to *use* it, not to read about it. Everything
+              else on this page argues; this one hands over a key. */}
+          <a href="#use-it" className="btn btn-primary btn-lg">
+            Get an API key
+            <span aria-hidden="true">→</span>
           </a>
-          <a
-            href="#benchmark"
-            className="inline-flex h-11 items-center rounded-lg border border-hairline-strong px-5 text-sm font-medium text-ink transition-colors hover:bg-surface"
-          >
-            See the benchmark
+          <a href="#try" className="btn btn-secondary btn-lg">
+            Watch two agents collide
           </a>
           <a
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-11 items-center rounded-lg px-2 text-sm text-ink-2 transition-colors hover:text-ink"
+            className="btn btn-ghost btn-lg"
           >
             Source ↗
           </a>
         </div>
 
+        <p
+          className="rise mt-4 text-[12px] text-muted"
+          style={{ animationDelay: "220ms" }}
+        >
+          Free, self-serve, no signup — the key is issued by the same cluster
+          this page runs on.
+        </p>
+        </div>
+
+        {/* Show the thing before explaining it. */}
+        <div className="rise lg:pt-2" style={{ animationDelay: "240ms" }}>
+          <HeroVisual />
+        </div>
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-6xl">
         {/* The single stat that reframes the whole problem. */}
-        <div className="mt-14 rounded-xl border border-hairline bg-surface p-6 sm:p-8">
+        <div
+          className="rise card card-accent mt-12 p-6 sm:p-8"
+          style={{ animationDelay: "300ms" }}
+        >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
               The finding that started this
@@ -159,7 +190,7 @@ function Problem() {
   ];
 
   return (
-    <Section id="problem">
+    <Section id="problem" tone="raised">
       <SectionHead
         eyebrow="The problem"
         title="An agent's transaction is not a database transaction"
@@ -272,7 +303,7 @@ function PriorArt() {
 
 function Mechanism() {
   return (
-    <Section id="mechanism">
+    <Section id="mechanism" tone="raised">
       <SectionHead
         eyebrow="The mechanism"
         title="Validation becomes reasoning; abort becomes repair"
@@ -334,7 +365,7 @@ function WhyCockroachDB() {
         lede="Every one of these is doing work the system could not do without it. Swap the database and the mechanism stops functioning, rather than merely getting slower."
       />
 
-      <div className="mt-10 overflow-hidden rounded-xl border border-hairline bg-surface">
+      <div className="mt-10 overflow-hidden card">
         {WHY_CRDB.map((row, i) => (
           <div
             key={row.feature}
@@ -426,7 +457,7 @@ function Architecture() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+        <div className="card p-5 sm:p-6">
           <h3 className="text-sm font-semibold text-ink">
             CockroachDB &mdash; all four tools
           </h3>
@@ -442,7 +473,7 @@ function Architecture() {
           </ul>
         </div>
 
-        <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+        <div className="card p-5 sm:p-6">
           <h3 className="text-sm font-semibold text-ink">
             AWS &mdash; only what we run on
           </h3>
@@ -479,7 +510,7 @@ function ChaosDrill() {
         }}
       />
 
-      <div className="mt-10 rounded-xl border border-hairline bg-surface p-6 sm:p-8">
+      <div className="mt-10 card p-6 sm:p-8">
         <p className="max-w-3xl text-base leading-relaxed text-ink-2">
           An agent whose memory goes offline does not degrade gracefully. It
           stops. That is the premise of this hackathon, and it is the one claim a
