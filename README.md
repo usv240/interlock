@@ -4,19 +4,57 @@
 
 Built on CockroachDB and AWS for the *Build with Agentic Memory* hackathon.
 
-🔗 **Live demo:** https://d3dgn014prmcy8.cloudfront.net
-🔌 **Public API:** `https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/`
+**[Live demo](https://d3dgn014prmcy8.cloudfront.net)** · **[API reference](docs/API.md)** · **[Setup](SETUP.md)** · MIT
+
+---
+
+## See it work — 30 seconds, no setup
+
+Node only. **No database, no AWS account, no configuration.** It issues itself a
+throwaway key and runs against the live service.
 
 ```bash
-# Run a real adjudication against the production cluster
-curl -s -X POST https://wpvk3ox2bxo2w3zhxmx54ssjf40rakuz.lambda-url.us-east-1.on.aws/v1/demo \
-  -H 'content-type: application/json' -d '{}'
+git clone https://github.com/usv240/interlock && cd interlock && npm install
+npm run quickstart
 ```
 
-INTERLOCK runs as a **service**, not only a demonstration. Point your own agent
-fleet at it: declare intents before acting, commit through the API, act on the
-ruling. Your agents keep their own reasoning and tools; INTERLOCK arbitrates
-only the shared state.
+```
+1. Is the service up?
+   healthy — 3 regions, survives region failure
+
+3. The Scheduler says what it is about to do — before it does it
+   intent declared with 4 plan steps
+
+4. Meanwhile, Triage commits into the same queue
+
+5. The ruling
+   verdict   INVALIDATING       ruled by claude-haiku-4-5
+   rationale The queue depth increased from 118 to 131, which changes the
+             overflow calculation and the volume to hand to APAC.
+
+   2 of 4 steps preserved — optimistic concurrency would discard all 4
+   cost of this ruling: $0.002
+```
+
+Two more worth a minute:
+
+| Command | What it shows |
+|---|---|
+| `npm run compare` | The same collision priced **with and without** INTERLOCK. Add `-- --reasoning 400` and it prints, in red, that we cost *more* below the crossover. |
+| `npm run verify` | Issues a key and proves it: authenticated, tenant-isolated, metered, garbage keys refused. |
+
+Everything above runs against the deployed system. Nothing is mocked or recorded.
+
+---
+
+## In one paragraph
+
+An LLM agent **reads** shared state, **thinks for forty seconds**, then **acts** —
+and the world moved while it was thinking. Lock the row and every other agent
+waits out an inference. Abort on conflict and you throw away all forty seconds of
+reasoning. INTERLOCK adds a third option: when a commit lands, work out *which
+plan steps it actually invalidated*, and redo only those. The database is not
+storage here — it is the mechanism. Swap it out and the product stops existing.
 
 ---
 
@@ -183,83 +221,47 @@ region.
 
 ---
 
-## Setup
+## Everything you can run
 
-Requires Node 20+, a CockroachDB Cloud cluster (**v25.2 or newer** — below that there is no vector index), and AWS credentials with Bedrock access.
+**No setup required** — these use our live deployment:
 
-```bash
-git clone <repo> && cd interlock
-npm install
-cp .env.example .env.local     # then fill it in — see SETUP.md
-```
-
-`SETUP.md` walks through obtaining every credential step by step.
-
-```bash
-npm run db:migrate    # schema, vector indexes, multi-region topology
-npm run db:verify     # proves serializable, 3 regions, time travel, vector index
-npm run ai:probe      # confirms every Bedrock tier is reachable
-npm run demo          # end-to-end walkthrough of the mechanism
-```
-
-### Everything you can run
-
-| Command | Purpose |
+| Command | What it does |
 |---|---|
-| `npm run db:check` | Connectivity + capability probe |
-| `npm run db:verify` | Proves the four claims this project rests on |
-| `npm run db:migrate` / `db:reset` | Apply / rebuild schema |
-| `npm run ai:probe` | All Bedrock tiers + accounting |
-| `npm run ai:calibrate` | Measures the semantic threshold from real embeddings |
-| `npm run ai:vector` | Shows whether the planner picks the vector index |
-| `npm run demo` | The mechanism, end to end |
-| `npm run bench` | Four modes, one workload |
-| `npm run bench:sweep` | The crossover curve |
-| `npm run chaos` | Connection-severing resilience drill |
-| `npm run quickstart` | The whole loop against the hosted API — no setup |
-| `npm run compare -- <key>` | Two collisions priced with and against INTERLOCK |
-| `npm run verify -- <key>` | Checks a key: auth, isolation, a real ruling |
-| `npm run test:tiers` | Proves each adjudicator tier maps to a distinct model |
-| `npm run test:sdk` | 12 contract checks against the live endpoint |
+| `npm run quickstart` | The whole loop: declare → collide → ruling |
+| `npm run compare` | The same collision priced with and without INTERLOCK |
+| `npm run verify` | Proves a key is authenticated, isolated and metered |
 | `npm run example:langchain` | Two LangChain agents contending over one queue |
+| `npm run test:sdk` | 13 contract checks against the live endpoint |
+
+**Needs your own cluster** (see [SETUP.md](SETUP.md)):
+
+| Command | What it does |
+|---|---|
+| `npm run db:migrate` / `db:reset` | Apply / rebuild the schema |
+| `npm run db:verify` | Proves serializable, 3 regions, time travel, vector index |
+| `npm run demo` | The mechanism end to end, locally, with full accounting |
+| `npm run bench` / `bench:sweep` | Four modes, one workload · the crossover curve |
+| `npm run chaos` | Connection-severing resilience drill |
+| `npm run ai:probe` / `ai:calibrate` / `ai:vector` | Bedrock reachability · threshold · index selection |
+| `npm run test:isolation` / `test:tiers` | Tenant isolation · model tier routing |
+| `npm run continuity` / `mcp` / `pipeline` | ccloud preflight · MCP tools · async pipeline health |
 
 Frontend: `cd web && npm install && npm run dev`
 
 ---
 
-## Run it yourself
+## Run the whole stack on your own infrastructure
 
-There are two different things that can mean.
+The commands at the top use our deployment. This is the path if you want to
+change the mechanism rather than call it: your own CockroachDB cluster, your own
+Bedrock access, your own Lambda.
 
-### A. Use the hosted service (about a minute, nothing to configure)
-
-Needs Node and nothing else — no database, no AWS account, no `.env`.
-
-```bash
-git clone <this repo> && cd interlock && npm install
-npm run quickstart
-```
-
-That registers two agents, declares a plan, commits a conflicting change from
-the other agent, and prints the ruling — which steps died, which survived, and
-what the decision cost. It issues a throwaway key if you don't have one; pass
-your own to use your tenant:
+Requires Node 20+, a CockroachDB Cloud cluster (**v25.2 or newer** — below that
+there is no vector index), and AWS credentials with Bedrock access.
+**[SETUP.md](SETUP.md)** walks through obtaining every credential step by step.
 
 ```bash
-npm run quickstart -- ilk_your_key_here
-```
-
-Then `npm run example:langchain` for the same thing driven by a LangChain
-callback, and `npm run test:sdk` for the 12 contract checks.
-
-### B. Run the whole stack on your own infrastructure
-
-Your own CockroachDB cluster, your own Bedrock access, your own Lambda. This is
-the path if you want to change the mechanism rather than call it. See
-[SETUP.md](SETUP.md) — roughly: create a free multi-region CockroachDB Cloud
-cluster, enable two Bedrock models, fill in `.env.local`, then
-
-```bash
+cp .env.example .env.local                # then fill it in — see SETUP.md
 npm run db:migrate && npm run db:verify   # schema, then proof it does what we claim
 npm run demo                              # the mechanism end to end, locally
 npm run api:deploy && npm run deploy      # your own API and site
