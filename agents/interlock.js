@@ -1,4 +1,4 @@
-﻿/**
+/**
  * INTERLOCK — the mechanism.
  *
  *   1. declare      an agent states its plan and read-set before acting
@@ -18,6 +18,7 @@
  */
 import { query, serializableTx, clusterHlc } from "./db.js";
 import { embed, complete } from "./bedrock.js";
+import { investigate, INVESTIGATION_MENU } from "./investigate.js";
 
 /**
  * COSINE distance above which a vector match is too weak to adjudicate.
@@ -414,6 +415,15 @@ export async function diffForIntent(intentId) {
 /* STEP 4 — ADJUDICATE                                                        */
 /* ========================================================================== */
 
+/**
+ * Should the adjudicator be allowed to investigate before ruling?
+ *
+ * Off by default: it costs a second model call plus an MCP round trip, and most
+ * conflicts are decidable from the diff alone. On when the ruling is worth more
+ * than the lookup — which is the same economics the whole project is about.
+ */
+const INVESTIGATION_ENABLED = process.env.ADJUDICATOR_INVESTIGATE === "1";
+
 const ADJUDICATOR_SYSTEM = `You arbitrate conflicts between concurrent AI agents sharing state.
 
 An agent declared a plan against a snapshot. While it was thinking, another agent committed a change. Decide whether that change actually invalidates the plan.
@@ -500,7 +510,7 @@ export async function adjudicate({ commitId, intentId, usage }) {
     `SELECT
        i.statement AS intent_statement,
        c.statement AS commit_statement,
-       r.kind, r.ext_key
+       r.kind, r.ext_key, r.id AS resource_id, c.agent_id
      FROM intent i
      CROSS JOIN commit_log c
      JOIN resource r ON r.id = c.resource_id
@@ -554,13 +564,58 @@ ${
         .join("\n")
 }`;
 
+  /*
+   * Optional investigation round.
+   *
+   * The adjudicator is offered a small menu of read-only lookups over the
+   * managed MCP server. If it says it needs one, we run it and put the answer
+   * in front of it before asking for a verdict.
+   *
+   * A model that cannot look anything up has to guess when the diff is
+   * ambiguous. One round is the budget — an adjudicator that can investigate
+   * indefinitely costs more than the work it is protecting, which is precisely
+   * the trap this project exists to avoid.
+   */
+  let evidence = "";
+  if (INVESTIGATION_ENABLED) {
+    const ask = await complete({
+      tier: "bulk",
+      system: `You are about to arbitrate a conflict. You may request ONE read-only lookup first, or none.
+
+Available:
+${INVESTIGATION_MENU}
+
+Reply with ONLY JSON: {"investigate": "<name>"} or {"investigate": null}
+Ask only if the answer would change your verdict.`,
+      prompt,
+      maxTokens: 60,
+      json: true,
+      usage,
+    });
+
+    const wanted = ask.data?.investigate;
+    if (wanted) {
+      const found = await investigate(wanted, {
+        resourceId: ctx[0].resource_id,
+        agentId: ctx[0].agent_id,
+      });
+      if (found?.rows?.length) {
+        evidence =
+          `\n\nEVIDENCE YOU REQUESTED (${found.name}, read-only via MCP)\n` +
+          found.rows.map((r) => JSON.stringify(r)).join("\n");
+      } else if (found?.error) {
+        evidence = `\n\n(Requested ${found.name}; unavailable: ${found.error})`;
+      }
+    }
+  }
+
   const res = await complete({
     // Cheap tier by default: the graph has already narrowed this to a short
     // yes/no over a candidate list. ADJUDICATOR_TIER=adjudicator restores the
     // larger model when a workload needs it.
     tier: process.env.ADJUDICATOR_TIER || "bulk",
     system: ADJUDICATOR_SYSTEM,
-    prompt,
+    prompt: prompt + evidence,
     maxTokens: 500,
     json: true,
     usage,

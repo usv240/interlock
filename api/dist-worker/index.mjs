@@ -5873,6 +5873,182 @@ async function complete({
   };
 }
 
+// agents/mcp.js
+var ENDPOINT = process.env.CRDB_MCP_URL || "https://cockroachlabs.cloud/mcp";
+var nextId = 1;
+async function rpc(method, params = {}) {
+  const apiKey = process.env.CCLOUD_API_KEY;
+  const clusterId = process.env.CRDB_CLUSTER_ID;
+  if (!apiKey || !clusterId) {
+    throw new Error("CCLOUD_API_KEY and CRDB_CLUSTER_ID must be set (see SETUP.md)");
+  }
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${apiKey}`,
+      "mcp-cluster-id": clusterId
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params })
+  });
+  if (!res.ok) {
+    throw new Error(`MCP ${method} -> HTTP ${res.status}: ${await res.text()}`);
+  }
+  const text = await res.text();
+  const line = text.split("\n").find((l) => l.startsWith("data:"));
+  const json = JSON.parse(line ? line.slice(5).trim() : text);
+  if (json.error) {
+    throw new Error(`MCP ${method}: ${json.error.message ?? JSON.stringify(json.error)}`);
+  }
+  return json.result;
+}
+async function initialize() {
+  return rpc("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "interlock-auditor", version: "0.1.0" }
+  });
+}
+async function listTools() {
+  const r = await rpc("tools/list");
+  return r.tools ?? [];
+}
+async function callTool(name, args = {}) {
+  return rpc("tools/call", { name, arguments: args });
+}
+function textOf(result) {
+  return (result?.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+}
+function rowsOf(result) {
+  try {
+    const parsed = JSON.parse(textOf(result));
+    return Array.isArray(parsed?.rows) ? parsed.rows : [];
+  } catch {
+    return [];
+  }
+}
+function formatRows(rows, columns) {
+  if (rows.length === 0) return "  (no rows)";
+  const cols = columns ?? Object.keys(rows[0]);
+  const width = Object.fromEntries(
+    cols.map((c) => [
+      c,
+      Math.min(
+        Math.max(c.length, ...rows.map((r) => String(r[c] ?? "").length)),
+        46
+      )
+    ])
+  );
+  const clip = (v, w) => {
+    const s = String(v ?? "");
+    return (s.length > w ? `${s.slice(0, w - 1)}\u2026` : s).padEnd(w);
+  };
+  const head = `  ${cols.map((c) => clip(c, width[c])).join("  ")}`;
+  const rule = `  ${cols.map((c) => "-".repeat(width[c])).join("  ")}`;
+  const body = rows.map((r) => `  ${cols.map((c) => clip(r[c], width[c])).join("  ")}`);
+  return [head, rule, ...body].join("\n");
+}
+async function auditRecentConflicts({ limit = 5 } = {}) {
+  const query2 = `SELECT ag.name AS agent, a.verdict::STRING AS verdict, a.detected_by, a.steps_repaired, a.steps_total, a.model_id, left(a.rationale, 80) AS rationale FROM adjudication a JOIN intent i ON i.id = a.intent_id JOIN agent ag ON ag.id = i.agent_id ORDER BY a.decided_at DESC LIMIT ${Number(limit)}`;
+  return rowsOf(await callTool("select_query", { database: "interlock", query: query2 }));
+}
+async function auditTopology() {
+  return rowsOf(
+    await callTool("show_statement", {
+      database: "interlock",
+      query: "SHOW REGIONS FROM DATABASE interlock"
+    })
+  );
+}
+var isMain = process.argv[1]?.endsWith("mcp.js");
+if (isMain) {
+  const ok = (s) => `\x1B[32mOK\x1B[0m    ${s}`;
+  const dim = (s) => `\x1B[2m${s}\x1B[0m`;
+  const b = (s) => `\x1B[1m${s}\x1B[0m`;
+  console.log(b("\nManaged MCP Server -- auditor console\n"));
+  const init = await initialize();
+  console.log(
+    ok(
+      `connected to ${init.serverInfo?.name} v${init.serverInfo?.version} (protocol ${init.protocolVersion})`
+    )
+  );
+  console.log(dim(`      auth: service-account API key, no OAuth round-trip needed`));
+  const tools = await listTools();
+  const readOnly = tools.filter(
+    (t) => /^(select_query|explain_query|show_|get_|list_)/.test(t.name)
+  );
+  console.log(
+    ok(
+      `${tools.length} tools exposed, ${readOnly.length} of them read-only (${readOnly.map((t) => t.name).slice(0, 4).join(", ")}, \u2026)`
+    )
+  );
+  console.log(b("\nRecent conflict rulings") + dim("  (queried over MCP, audit logged)\n"));
+  try {
+    const rows = await auditRecentConflicts({ limit: 6 });
+    console.log(
+      rows.length ? formatRows(rows, [
+        "agent",
+        "verdict",
+        "detected_by",
+        "steps_repaired",
+        "steps_total",
+        "rationale"
+      ]) : dim("  no adjudications yet \u2014 run `npm run demo` or `npm run bench`")
+    );
+  } catch (e) {
+    console.log(dim(`  ${e.message}`));
+  }
+  console.log(b("\nResilience posture") + dim("  (confirmed through the audited channel)\n"));
+  try {
+    const topo = await auditTopology();
+    console.log(formatRows(topo, ["region", "primary", "zones"]));
+  } catch (e) {
+    console.log(dim(`  ${e.message}`));
+  }
+  console.log(
+    dim(
+      "\n  Every statement above travelled over the managed MCP server: read-only,\n  audit logged, no custom proxy. This console can reconstruct an incident;\n  it cannot alter the incident it is reconstructing.\n"
+    )
+  );
+}
+
+// agents/investigate.js
+var INVESTIGATIONS = {
+  resource_history: {
+    describe: "Recent commits against the contended resource. Use to tell a one-off change from sustained churn.",
+    async run({ resourceId }) {
+      const query2 = `SELECT ag.name AS agent, c.prev_version, c.new_version, left(c.statement, 90) AS statement, c.committed_at FROM commit_log c JOIN agent ag ON ag.id = c.agent_id WHERE c.resource_id = '${resourceId}' ORDER BY c.committed_at DESC LIMIT 5`;
+      return rowsOf(await callTool("select_query", { database: "interlock", query: query2 }));
+    }
+  },
+  agent_track_record: {
+    describe: "How this agent's previous intents were ruled. Use to weigh whether its plans usually survive.",
+    async run({ agentId }) {
+      const query2 = `SELECT a.verdict::STRING AS verdict, a.steps_repaired, a.steps_total, left(a.rationale, 80) AS rationale FROM adjudication a JOIN intent i ON i.id = a.intent_id WHERE i.agent_id = '${agentId}' ORDER BY a.decided_at DESC LIMIT 5`;
+      return rowsOf(await callTool("select_query", { database: "interlock", query: query2 }));
+    }
+  },
+  contention_now: {
+    describe: "Other intents currently open against the same resource. Use to judge whether repairing is even worth it.",
+    async run({ resourceId }) {
+      const query2 = `SELECT ag.name AS agent, i.status::STRING AS status, left(i.statement, 90) AS statement FROM intent i JOIN intent_read ir ON ir.intent_id = i.id JOIN agent ag ON ag.id = i.agent_id WHERE ir.resource_id = '${resourceId}' AND i.status IN ('open','threatened') LIMIT 5`;
+      return rowsOf(await callTool("select_query", { database: "interlock", query: query2 }));
+    }
+  }
+};
+var INVESTIGATION_MENU = Object.entries(INVESTIGATIONS).map(([name, v]) => `  ${name} \u2014 ${v.describe}`).join("\n");
+async function investigate(name, args) {
+  const tool = INVESTIGATIONS[name];
+  if (!tool) return null;
+  try {
+    const rows = await tool.run(args);
+    return { name, rows: rows.slice(0, 5) };
+  } catch (e) {
+    return { name, error: e.message?.split("\n")[0]?.slice(0, 120) };
+  }
+}
+
 // agents/interlock.js
 var SEMANTIC_THRESHOLD = Number(process.env.SEMANTIC_THRESHOLD ?? 0.58);
 var SEMANTIC_K = Number(process.env.SEMANTIC_K ?? 10);
@@ -6016,6 +6192,7 @@ async function diffForIntent(intentId) {
   }
   return { source, hlc, changes };
 }
+var INVESTIGATION_ENABLED = process.env.ADJUDICATOR_INVESTIGATE === "1";
 var ADJUDICATOR_SYSTEM = `You arbitrate conflicts between concurrent AI agents sharing state.
 
 An agent declared a plan against a snapshot. While it was thinking, another agent committed a change. Decide whether that change actually invalidates the plan.
@@ -6079,7 +6256,7 @@ async function adjudicate({ commitId, intentId, usage }) {
     `SELECT
        i.statement AS intent_statement,
        c.statement AS commit_statement,
-       r.kind, r.ext_key
+       r.kind, r.ext_key, r.id AS resource_id, c.agent_id
      FROM intent i
      CROSS JOIN commit_log c
      JOIN resource r ON r.id = c.resource_id
@@ -6120,13 +6297,47 @@ ${diff.changes.length === 0 ? "No tracked resource changed value." : diff.change
     then: ${JSON.stringify(c.thenBody)}
     now:  ${JSON.stringify(c.nowBody)}`
   ).join("\n")}`;
+  let evidence = "";
+  if (INVESTIGATION_ENABLED) {
+    const ask = await complete({
+      tier: "bulk",
+      system: `You are about to arbitrate a conflict. You may request ONE read-only lookup first, or none.
+
+Available:
+${INVESTIGATION_MENU}
+
+Reply with ONLY JSON: {"investigate": "<name>"} or {"investigate": null}
+Ask only if the answer would change your verdict.`,
+      prompt,
+      maxTokens: 60,
+      json: true,
+      usage
+    });
+    const wanted = ask.data?.investigate;
+    if (wanted) {
+      const found = await investigate(wanted, {
+        resourceId: ctx[0].resource_id,
+        agentId: ctx[0].agent_id
+      });
+      if (found?.rows?.length) {
+        evidence = `
+
+EVIDENCE YOU REQUESTED (${found.name}, read-only via MCP)
+` + found.rows.map((r) => JSON.stringify(r)).join("\n");
+      } else if (found?.error) {
+        evidence = `
+
+(Requested ${found.name}; unavailable: ${found.error})`;
+      }
+    }
+  }
   const res = await complete({
     // Cheap tier by default: the graph has already narrowed this to a short
     // yes/no over a candidate list. ADJUDICATOR_TIER=adjudicator restores the
     // larger model when a workload needs it.
     tier: process.env.ADJUDICATOR_TIER || "bulk",
     system: ADJUDICATOR_SYSTEM,
-    prompt,
+    prompt: prompt + evidence,
     maxTokens: 500,
     json: true,
     usage

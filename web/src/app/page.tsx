@@ -370,7 +370,7 @@ function Architecture() {
     },
     {
       tool: "Managed MCP Server",
-      use: "The human arbitration console. Read-only and audit-logged by default, which is exactly right for inspecting a live conflict without being able to make it worse.",
+      use: "Not a human console — a tool belt for the adjudicating agent. Before ruling, it may request one read-only lookup: has this resource been churning all morning, or is this the first change in an hour? Because the server is read-only by default, an agent investigating an incident is structurally incapable of altering it, and every lookup is audit-logged outside our own logging. A model that cannot look things up has to guess.",
     },
     {
       tool: "ccloud / Cloud control plane",
