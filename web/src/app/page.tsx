@@ -440,7 +440,11 @@ function Architecture() {
     },
     {
       tool: "Agent Skills Repo",
-      use: "We consume the published skills for schema and index design, and contribute one back upstream for serializable agent intents.",
+      // Said "contribute one back upstream" until someone checked. The skill is
+      // real and it is in this repo; there is no pull request. A claim nobody
+      // verified is exactly the kind of thing this project spends its time
+      // deleting elsewhere.
+      use: "We consume the published skills for schema and index design, and wrote one in return for serializable agent intents — skills/managing-long-running-agent-transactions. It ships in this repo and is not upstream; we would rather say that than imply a merge that has not happened.",
     },
   ];
 

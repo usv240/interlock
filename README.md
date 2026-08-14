@@ -137,7 +137,7 @@ Exactly-once is structural, not conventional: a `UNIQUE` index on `(commit_id, i
 | **Distributed Vector Indexing** | C-SPANN indexes over `intent`, `commit_log`, `plan_step` embeddings. Detects plans threatened by *meaning* when they share no rows. Threshold is measured, not guessed — `npm run ai:calibrate`. |
 | **Managed MCP Server** | Read-only, audit-logged console for inspecting live conflicts. Investigation is inherently read-only, so the safe-by-default posture is exactly right. |
 | **ccloud CLI** | Continuity agent: inspects regions, reads the GC window that bounds time-travel reach, snapshots before adjudication cascades. |
-| **Agent Skills Repo** | Consumed for schema and index design; one skill contributed back upstream. |
+| **Agent Skills Repo** | Consumed for schema and index design. We wrote one back — skills/managing-long-running-agent-transactions/ — and it is in this repo, not yet upstream. |
 
 ## AWS services used
 
