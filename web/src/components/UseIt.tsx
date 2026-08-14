@@ -3,6 +3,7 @@ import { API_URL, REPO_URL } from "@/lib/content";
 import InfoButton from "./InfoButton";
 import GetKey from "./GetKey";
 import CodeBlock from "./CodeBlock";
+import { Disclosure } from "./ui";
 
 const HEALTH_CMD = `curl -s ${API_URL}v1/health`;
 const DEMO_CMD =
@@ -106,50 +107,18 @@ const ENDPOINTS = [
 
 export default function UseIt() {
   return (
-    <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-5">
-      <div className="lg:col-span-2">
+    <div className="mt-8">
+      <div>
         <div className="card p-5 sm:p-6">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-            Full API reference
-            <InfoButton
-              title="Why this is public"
-              what="An unauthenticated HTTP API exposing the same mechanism the demo above uses."
-              how="Declare intents before acting, commit through /v1/commits, and receive a ruling for every agent your write threatened. Your agents keep their own logic; INTERLOCK only arbitrates the shared state."
-              note="Rate limited by a ceiling held in CockroachDB rather than in Lambda memory — instances are ephemeral and concurrent, so per-instance counters undercount exactly when it matters."
-            />
-          </h3>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
-            You do not need this to start &mdash; the three steps on the right
-            are the path. This is here for when you are wiring up a real fleet.
-          </p>
-
-          <ul className="mt-4 flex flex-col gap-4">
-            {ENDPOINTS.map((e) => (
-              <li key={e.path}>
-                <p className="font-mono text-[12px]">
-                  <span className="text-accent">{e.method}</span>{" "}
-                  <span className="text-ink">{e.path}</span>
-                  {e.free && (
-                    <span className="ml-2 rounded-full border border-hairline px-1.5 py-0.5 text-[10px] text-muted">
-                      no quota
-                    </span>
-                  )}
-                </p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{e.what}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="lg:col-span-3">
-        <div className="h-full card p-5 sm:p-6">
           <h3 className="text-sm font-semibold text-ink">Start here</h3>
           <p className="mt-1 text-[13px] text-ink-2">
             The first three take about a minute and need nothing but a terminal.
           </p>
 
-          <ol className="mt-5 flex flex-col gap-5">
+          {/* Two columns on wide screens. These four steps are independent
+              things you can do, not a chain where each depends on the last, so
+              stacking them just made the section twice as tall. */}
+          <ol className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-8">
             <Step n={1} title="See that it is real">
               <p className="mb-2.5 text-[13px] leading-relaxed text-ink-2">
                 No key needed. Returns the live topology, the survival goal, and
@@ -192,9 +161,14 @@ export default function UseIt() {
             </Step>
           </ol>
 
-          <div className="mt-5 border-t border-hairline pt-5">
+          <div className="mt-6 grid grid-cols-1 gap-3 border-t border-hairline pt-6 lg:grid-cols-2">
+          <Disclosure
+            summary="Already on LangChain? Add a callback."
+            hint="one wrapper, no rewrite"
+          >
+            <div className="rounded-lg border border-hairline p-4">
             <h4 className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-              Already on LangChain? Add a callback.
+              A guard, not a rewrite
               <InfoButton
                 title="Why a callback, not a memory class"
                 what="LangChain already tells its callbacks what a chain is about to do, and which tool it is about to call. That is exactly what INTERLOCK needs to declare an intent and record plan steps."
@@ -226,6 +200,43 @@ export default function UseIt() {
               conflict be repaired at step granularity instead of throwing the
               task away.
             </p>
+            </div>
+          </Disclosure>
+
+          <Disclosure
+            summary="Full API reference"
+            hint={`${ENDPOINTS.length} endpoints`}
+          >
+            <div className="rounded-lg border border-hairline p-4">
+              <h4 className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                Every endpoint
+                <InfoButton
+                  title="Why this is public"
+                  what="An unauthenticated HTTP API exposing the same mechanism the demo above uses."
+                  how="Declare intents before acting, commit through /v1/commits, and receive a ruling for every agent your write threatened. Your agents keep their own logic; INTERLOCK only arbitrates the shared state."
+                  note="Rate limited by a ceiling held in CockroachDB rather than in Lambda memory — instances are ephemeral and concurrent, so per-instance counters undercount exactly when it matters."
+                />
+              </h4>
+              <ul className="mt-3 flex flex-col gap-3">
+                {ENDPOINTS.map((e) => (
+                  <li key={e.path}>
+                    <p className="font-mono text-[12px]">
+                      <span className="text-accent">{e.method}</span>{" "}
+                      <span className="text-ink">{e.path}</span>
+                      {e.free && (
+                        <span className="ml-2 rounded-full border border-hairline px-1.5 py-0.5 text-[10px] text-muted">
+                          no quota
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-2">
+                      {e.what}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Disclosure>
           </div>
 
           <p className="mt-5 border-t border-hairline pt-5 text-[12px] leading-relaxed text-muted">

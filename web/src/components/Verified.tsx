@@ -1,5 +1,6 @@
 import { VERIFIED } from "@/lib/content";
 import InfoButton from "./InfoButton";
+import { Disclosure } from "./ui";
 
 /**
  * Claims, and the command that proves each one.
@@ -10,11 +11,20 @@ import InfoButton from "./InfoButton";
  * check the second.
  */
 export default function Verified() {
+  // Collapsed by default. It is the most credible thing on the page and also
+  // the least readable in passing — eight rows of claim-and-command that a
+  // reader either wants in full or does not want to scroll through at all.
+  // Open is one click; scrolling past it was not optional.
   return (
-    <div className="mt-10 overflow-hidden card">
+    <Disclosure
+      className="mt-6"
+      summary="Verified against the live cluster"
+      hint={`${VERIFIED.length} claims, each with the command that proves it`}
+    >
+      <div className="overflow-hidden card">
       <div className="flex items-center gap-2 border-b border-hairline px-5 py-4 sm:px-6">
         <h3 className="text-sm font-semibold text-ink">
-          Verified against the live cluster
+          Every claim, and how to check it
         </h3>
         <InfoButton
           title="Why this table exists"
@@ -59,6 +69,7 @@ export default function Verified() {
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </Disclosure>
   );
 }

@@ -5,11 +5,26 @@ import InfoButton, { type InfoButtonProps } from "./InfoButton";
 export function Section({
   id,
   children,
+  head,
   className = "",
   tone = "page",
 }: {
   id?: string;
   children: ReactNode;
+  /**
+   * The section heading. Passing it here rather than as a child moves it into a
+   * sticky left rail on wide screens.
+   *
+   * Stacked headings cost twice: they add their own height to every section,
+   * and they leave the right half of the measure empty while doing it — this
+   * page is long enough that both matter. Beside the content, the heading also
+   * stays visible while you read, so a reader who scrolled into the middle of a
+   * section still knows which argument they are inside.
+   *
+   * Only for sections whose content is text or narrow cards. Charts and
+   * diagrams keep the full measure and pass their heading as a child.
+   */
+  head?: ReactNode;
   className?: string;
   /**
    * Alternating grounds give a long page rhythm. Without it, fourteen sections
@@ -21,12 +36,68 @@ export function Section({
   return (
     <section
       id={id}
-      className={`border-t border-hairline px-5 py-16 sm:px-8 sm:py-20 lg:py-24 ${
+      className={`border-t border-hairline px-5 py-12 sm:px-8 sm:py-14 lg:py-16 ${
         tone === "raised" ? "bg-page-2" : ""
       } ${className}`}
     >
-      <div className="mx-auto w-full max-w-6xl">{children}</div>
+      <div className="mx-auto w-full max-w-6xl">
+        {head ? (
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12">
+            {/* `self-start` is what makes sticky work here: a grid item stretches
+                to the row height by default, which leaves nothing to stick. */}
+            <div className="self-start lg:sticky lg:top-24">{head}</div>
+            <div className="min-w-0">{children}</div>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
     </section>
+  );
+}
+
+/**
+ * Detail that most readers should not have to scroll past.
+ *
+ * Native `<details>`, so it is keyboard-accessible, findable by the browser's
+ * own find-in-page in modern browsers, and correct with no JavaScript. The
+ * summary states what is inside and how much of it, because "Show more" asks
+ * the reader to gamble on whether it is worth the click.
+ */
+export function Disclosure({
+  summary,
+  hint,
+  children,
+  className = "",
+}: {
+  summary: string;
+  /** e.g. "8 rows" — sets the expectation before the click. */
+  hint?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details className={`group ${className}`}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-hairline bg-surface px-4 py-3 text-[13px] font-medium text-ink transition-colors hover:border-hairline-strong [&::-webkit-details-marker]:hidden">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="shrink-0 text-muted transition-transform group-open:rotate-90"
+        >
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+        {summary}
+        {hint && <span className="text-[12px] font-normal text-muted">{hint}</span>}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
   );
 }
 

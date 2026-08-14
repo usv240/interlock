@@ -7,7 +7,7 @@ import LiveDemo from "@/components/LiveDemo";
 import HeroVisual from "@/components/HeroVisual";
 import UseIt from "@/components/UseIt";
 import InfoButton from "@/components/InfoButton";
-import { Card, Pill, Section, SectionHead } from "@/components/ui";
+import { Card, Disclosure, Pill, Section, SectionHead } from "@/components/ui";
 import { CITATIONS, REPO_URL, STEPS, WHY_CRDB } from "@/lib/content";
 
 export default function Page() {
@@ -303,50 +303,52 @@ function PriorArt() {
 
 function Mechanism() {
   return (
-    <Section id="mechanism" tone="raised">
-      <SectionHead
-        eyebrow="The mechanism"
-        title="Validation becomes reasoning; abort becomes repair"
-        lede={
-          <>
-            The insight is that <em>most conflicts are semantically irrelevant</em>
-            . An agent can read the conflicting write and judge whether it
-            actually breaks its plan. A real conflict needs repair of only the
-            dependent steps &mdash; not the whole task.
-          </>
-        }
-        info={{
-          title: "MVCC with a brain",
-          what: "Optimistic concurrency control in which the validation step is a judgement rather than a version check.",
-          how: "Classical OCC asks 'did any version I read change?' and aborts if so. INTERLOCK asks 'does what changed actually invalidate my plan?' — and when the answer is yes, it repairs precisely the steps that depended on the changed fact.",
-          note: "The final commit is still a real serializable transaction, so correctness never rests on the model's judgement.",
-        }}
-      />
-
-      <ol className="mt-10 flex flex-col gap-3">
+    <Section
+      id="mechanism"
+      tone="raised"
+      head={
+        <SectionHead
+          eyebrow="The mechanism"
+          title="Validation becomes reasoning; abort becomes repair"
+          lede={
+            <>
+              The insight is that{" "}
+              <em>most conflicts are semantically irrelevant</em>. An agent can
+              read the conflicting write and judge whether it actually breaks its
+              plan. A real conflict needs repair of only the dependent steps
+              &mdash; not the whole task.
+            </>
+          }
+          info={{
+            title: "MVCC with a brain",
+            what: "Optimistic concurrency control in which the validation step is a judgement rather than a version check.",
+            how: "Classical OCC asks 'did any version I read change?' and aborts if so. INTERLOCK asks 'does what changed actually invalidate my plan?' — and when the answer is yes, it repairs precisely the steps that depended on the changed fact.",
+            note: "The final commit is still a real serializable transaction, so correctness never rests on the model's judgement.",
+          }}
+        />
+      }
+    >
+      {/* A numbered rail rather than five stacked cards. The steps are a
+          sequence, and a connecting line says so more economically than five
+          bordered boxes with their own padding. */}
+      <ol className="relative flex flex-col gap-5 pl-8">
+        <span
+          className="absolute bottom-3 left-[15px] top-3 w-px bg-hairline-strong"
+          aria-hidden="true"
+        />
         {STEPS.map((s) => (
-          <li key={s.n}>
-            <Card>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-                <div className="flex items-center gap-3 sm:w-52 sm:shrink-0">
-                  <span className="tabular flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline-strong font-mono text-[13px] text-accent">
-                    {s.n}
-                  </span>
-                  <span className="flex items-center gap-2 text-base font-semibold text-ink">
-                    {s.name}
-                    <InfoButton {...s.info} />
-                  </span>
-                </div>
-
-                <p className="flex-1 text-sm leading-relaxed text-ink-2">
-                  {s.summary}
-                </p>
-
-                <div className="sm:w-56 sm:shrink-0 sm:text-right">
-                  <Pill>{s.feature}</Pill>
-                </div>
-              </div>
-            </Card>
+          <li key={s.n} className="relative">
+            <span className="tabular absolute -left-8 top-0 flex h-8 w-8 items-center justify-center rounded-full border border-hairline-strong bg-surface font-mono text-[12px] text-accent">
+              {s.n}
+            </span>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h3 className="text-[15px] font-semibold text-ink">{s.name}</h3>
+              <InfoButton {...s.info} />
+              <Pill>{s.feature}</Pill>
+            </div>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
+              {s.summary}
+            </p>
           </li>
         ))}
       </ol>
@@ -358,32 +360,29 @@ function Mechanism() {
 
 function WhyCockroachDB() {
   return (
-    <Section id="why-cockroachdb">
-      <SectionHead
-        eyebrow="Why this database"
-        title="Not convenient — load-bearing"
-        lede="Every one of these is doing work the system could not do without it. Swap the database and the mechanism stops functioning, rather than merely getting slower."
-      />
-
-      <div className="mt-10 overflow-hidden card">
-        {WHY_CRDB.map((row, i) => (
-          <div
-            key={row.feature}
-            className={`grid grid-cols-1 gap-3 p-5 sm:grid-cols-12 sm:gap-6 sm:p-6 ${
-              i > 0 ? "border-t border-hairline" : ""
-            }`}
-          >
-            <div className="sm:col-span-3">
-              <p className="font-mono text-[13px] font-medium text-accent">
-                {row.feature}
-              </p>
-            </div>
-            <div className="sm:col-span-3">
-              <p className="text-sm font-medium text-ink">{row.need}</p>
-            </div>
-            <div className="sm:col-span-6">
-              <p className="text-sm leading-relaxed text-ink-2">{row.detail}</p>
-            </div>
+    <Section
+      id="why-cockroachdb"
+      head={
+        <SectionHead
+          eyebrow="Why this database"
+          title="Not convenient — load-bearing"
+          lede="Every one of these is doing work the system could not do without it. Swap the database and the mechanism stops functioning, rather than merely getting slower."
+        />
+      }
+    >
+      {/* Cards, not a six-row table. Each row was a full-width band with a
+          three-word cell beside a three-line one, so the table was as tall as
+          its longest cell in every single row. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {WHY_CRDB.map((row) => (
+          <div key={row.feature} className="card p-4">
+            <p className="font-mono text-[12px] font-medium text-accent">
+              {row.feature}
+            </p>
+            <p className="mt-1.5 text-[13.5px] font-medium text-ink">{row.need}</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
+              {row.detail}
+            </p>
           </div>
         ))}
       </div>
@@ -452,43 +451,52 @@ function Architecture() {
         lede="The hackathon asks for at least two CockroachDB tools and one AWS service. We use all four CockroachDB tools — and only the AWS services we genuinely run on, because claiming more than you use is worse than claiming less."
       />
 
-      <div className="mt-10">
+      <div className="mt-8">
         <ArchitectureDiagram />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-ink">
-            CockroachDB &mdash; all four tools
-          </h3>
-          <ul className="mt-4 flex flex-col gap-4">
-            {crdb.map((r) => (
-              <li key={r.tool}>
-                <p className="font-mono text-[12px] text-accent">{r.tool}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-                  {r.use}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* The diagram is the answer. This is the annex behind it — every service
+          with a paragraph on what it does — which is exactly the material a
+          reader should be able to skip and a judge should be able to open. */}
+      <Disclosure
+        className="mt-4"
+        summary="What every service is doing, and why it is there"
+        hint={`${crdb.length} CockroachDB tools · ${aws.length} AWS services`}
+      >
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="card p-5 sm:p-6">
+            <h3 className="text-sm font-semibold text-ink">
+              CockroachDB &mdash; all four tools
+            </h3>
+            <ul className="mt-4 flex flex-col gap-4">
+              {crdb.map((r) => (
+                <li key={r.tool}>
+                  <p className="font-mono text-[12px] text-accent">{r.tool}</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+                    {r.use}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-        <div className="card p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-ink">
-            AWS &mdash; only what we run on
-          </h3>
-          <ul className="mt-4 flex flex-col gap-4">
-            {aws.map((r) => (
-              <li key={r.tool}>
-                <p className="font-mono text-[12px] text-accent">{r.tool}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-                  {r.use}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <div className="card p-5 sm:p-6">
+            <h3 className="text-sm font-semibold text-ink">
+              AWS &mdash; only what we run on
+            </h3>
+            <ul className="mt-4 flex flex-col gap-4">
+              {aws.map((r) => (
+                <li key={r.tool}>
+                  <p className="font-mono text-[12px] text-accent">{r.tool}</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+                    {r.use}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
+      </Disclosure>
     </Section>
   );
 }
@@ -497,26 +505,29 @@ function Architecture() {
 
 function ChaosDrill() {
   return (
-    <Section id="chaos">
-      <SectionHead
-        eyebrow="Resilience"
-        title="Kill a region mid-adjudication"
-        lede="If the memory arbitrating conflicts is unavailable, every agent in the fleet is unsafe at the same moment. So the test is not whether it works — it is whether it keeps working while a region is being taken away from it."
-        info={{
-          title: "The chaos drill",
-          what: "A deliberate failure injected while the system is mid-decision, to show the guarantee holds under loss rather than only under calm.",
-          how: "We start a multi-region cluster, drive a contended workload until an adjudication is in flight, then remove a region. The adjudication completes from the surviving region, exactly once, still serializable — no decision is lost and none is applied twice.",
-          note: "This is also where the production write-up comes from: we intend to break it, record what broke, and document the fix.",
-        }}
-      />
-
-      <div className="mt-10 card p-6 sm:p-8">
-        <p className="max-w-3xl text-base leading-relaxed text-ink-2">
+    <Section
+      id="chaos"
+      head={
+        <SectionHead
+          eyebrow="Resilience"
+          title="Kill a region mid-adjudication"
+          lede="If the memory arbitrating conflicts is unavailable, every agent in the fleet is unsafe at the same moment. So the test is not whether it works — it is whether it keeps working while a region is being taken away from it."
+          info={{
+            title: "The chaos drill",
+            what: "A deliberate failure injected while the system is mid-decision, to show the guarantee holds under loss rather than only under calm.",
+            how: "We start a multi-region cluster, drive a contended workload until an adjudication is in flight, then remove a region. The adjudication completes from the surviving region, exactly once, still serializable — no decision is lost and none is applied twice.",
+            note: "This is also where the production write-up comes from: we intend to break it, record what broke, and document the fix.",
+          }}
+        />
+      }
+    >
+      <div className="card p-6 sm:p-8">
+        <p className="text-[15px] leading-relaxed text-ink-2">
           An agent whose memory goes offline does not degrade gracefully. It
           stops. That is the premise of this hackathon, and it is the one claim a
           demo can actually prove rather than assert.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           <Pill>SURVIVE REGION FAILURE</Pill>
           <Pill>exactly-once adjudication</Pill>
           <Pill>no lost decisions</Pill>

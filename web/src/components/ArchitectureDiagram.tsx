@@ -14,7 +14,14 @@ import InfoButton from "./InfoButton";
  */
 
 const W = 860;
-const H = 400;
+/**
+ * Taller than it was, so the asynchronous lane clears the CockroachDB spine.
+ *
+ * The two used to share a horizontal band: the spine runs y 40–340, and the
+ * worker sat at y 274 — directly on top of the "MVCC history / AS OF SYSTEM
+ * TIME" row inside it. A box that hides a feature is worse than no box.
+ */
+const H = 480;
 
 function Box({
   x, y, w = 132, h = 52, title, sub, accent = false, dashed = false,
@@ -124,15 +131,19 @@ export default function ArchitectureDiagram() {
           <text x="14" y="46" fontSize="10" fontWeight="600" fill="var(--muted)">
             AGENT WAITS
           </text>
-          <text x="14" y="264" fontSize="10" fontWeight="600" fill="var(--muted)">
+          <text x="14" y="348" fontSize="10" fontWeight="600" fill="var(--muted)">
             AGENT DOES NOT WAIT
           </text>
 
-          {/* ---- synchronous lane ---- */}
-          <Box x={110} y={60} title="Agent fleet" sub="yours, or ours" />
-          <Arrow from={[242, 86]} to={[300, 86]} />
-          <Box x={300} y={60} title="Lambda API" sub="/v1/intents · /v1/commits" w={158} accent />
-          <Arrow from={[458, 86]} to={[516, 86]} label="declare + commit" />
+          {/* ---- synchronous lane ----
+              Shifted left of where it started. The gap before the spine was 58px
+              and the label above it is about 90px wide, so "declare + commit"
+              ran under the CockroachDB panel — which is drawn afterwards, and
+              therefore painted over the right third of the words. */}
+          <Box x={70} y={60} title="Agent fleet" sub="yours, or ours" />
+          <Arrow from={[202, 86]} to={[250, 86]} />
+          <Box x={250} y={60} title="Lambda API" sub="/v1/intents · /v1/commits" w={158} accent />
+          <Arrow from={[408, 86]} to={[516, 86]} label="declare + commit" />
 
           {/* ---- CockroachDB spine ---- */}
           <rect
@@ -168,44 +179,51 @@ export default function ArchitectureDiagram() {
           ))}
 
           {/* ---- asynchronous lane ---- */}
-          <Arrow from={[746, 300]} to={[790, 300]} dashed />
-          <text x={768} y={292} textAnchor="middle" fontSize="9" fill="var(--muted)">
+          <Arrow from={[746, 300]} to={[792, 300]} dashed />
+          <text x={784} y={292} textAnchor="middle" fontSize="9" fill="var(--muted)">
             changefeed
           </text>
 
-          {/* wrap around to the left of the async lane */}
+          {/* wrap around and back to the left of the async lane */}
           <path
-            d="M 790 300 Q 830 300 830 330 Q 830 360 790 360 L 130 360 Q 96 360 96 330 L 96 300"
+            d="M 792 300 Q 834 300 834 340 Q 834 452 792 452 L 138 452 Q 96 452 96 430 L 96 418"
             fill="none" stroke="var(--baseline)" strokeWidth="1.5" strokeDasharray="5 4"
             markerEnd="url(#arrowhead)"
           />
-          <text x={460} y={374} textAnchor="middle" fontSize="9.5" fill="var(--muted)">
+          <text x={460} y={468} textAnchor="middle" fontSize="9.5" fill="var(--muted)">
             commit_log rows stream out of the same durable log the write went into
           </text>
 
-          <Box x={30} y={274} title="/v1/cdc" sub="webhook sink" w={132} dashed />
-          <Arrow from={[162, 300]} to={[196, 300]} dashed />
-          <Box x={196} y={274} title="EventBridge" sub="commit.landed" w={126} dashed />
-          <Arrow from={[322, 300]} to={[356, 300]} dashed />
-          <Box x={356} y={274} title="SQS" sub="3 retries → DLQ" w={110} dashed />
-          <Arrow from={[466, 300]} to={[500, 300]} dashed />
-          <Box x={500} y={274} title="Worker λ" sub="parallel, batched" w={0} />
+          <Box x={30} y={362} title="/v1/cdc" sub="webhook sink" w={132} dashed />
+          <Arrow from={[162, 388]} to={[196, 388]} dashed />
+          <Box x={196} y={362} title="EventBridge" sub="commit.landed" w={126} dashed />
+          <Arrow from={[322, 388]} to={[356, 388]} dashed />
+          <Box x={356} y={362} title="SQS" sub="3 retries → DLQ" w={110} dashed />
+          <Arrow from={[466, 388]} to={[488, 388]} dashed />
 
-          {/* worker sits over the spine edge, so draw it explicitly */}
-          <rect x={488} y={274} width={112} height={52} rx="8"
+          {/* The worker sits over the spine's edge, so it is drawn explicitly
+              rather than as a <Box>. A zero-width <Box> was left here after that
+              change and kept painting a second "Worker λ" centred at x=500 —
+              on top of the CockroachDB panel, which starts at 516. */}
+          <rect x={488} y={362} width={112} height={52} rx="8"
             fill="var(--surface)" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="4 3" />
-          <text x={544} y={295} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--accent)">
+          <text x={544} y={383} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--accent)">
             Worker λ
           </text>
-          <text x={544} y={311} textAnchor="middle" fontSize="10" fill="var(--muted)">
+          <text x={544} y={399} textAnchor="middle" fontSize="10" fill="var(--muted)">
             batched, parallel
           </text>
 
-          {/* Bedrock */}
-          <Box x={762} y={148} title="Bedrock" sub="Titan + Claude" w={86} accent />
-          <Arrow from={[600, 288]} to={[762, 190]} dashed curve={-24} />
-          <text x={706} y={244} textAnchor="middle" fontSize="9" fill="var(--muted)">
-            embed · adjudicate
+          {/* Bedrock sits in the async lane beside the worker that calls it,
+              rather than up beside the spine with a long diagonal crossing it.
+              The worker is the only thing that reaches Bedrock here. */}
+          <Box x={706} y={362} title="Bedrock" sub="Titan + Claude" w={110} accent />
+          <Arrow from={[600, 388]} to={[706, 388]} dashed label="embed · adjudicate" />
+
+          {/* the worker reads detection state back out of the spine */}
+          <Arrow from={[544, 362]} to={[544, 342]} dashed />
+          <text x={556} y={352} fontSize="9" fill="var(--muted)">
+            detect
           </text>
         </svg>
       </div>

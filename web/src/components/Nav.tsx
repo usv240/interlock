@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 import { REPO_URL } from "@/lib/content";
 
@@ -16,9 +16,62 @@ const LINKS = [
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<string>("");
+  const [progress, setProgress] = useState(0);
+
+  /**
+   * Where am I, and how much is left?
+   *
+   * Both questions get sharper the longer the page, and this one is long even
+   * after cutting a quarter of its height. The progress bar answers the second
+   * continuously; the highlighted link answers the first.
+   *
+   * Progress is read from scroll position rather than from the observer,
+   * because a section-based estimate jumps in uneven steps — sections are not
+   * the same height, so the bar would move fast through short ones and stall
+   * through the benchmark.
+   */
+  useEffect(() => {
+    const ids = LINKS.map((l) => l.href.slice(1));
+    const sections = ids
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+
+    const onScroll = () => {
+      const doc = document.documentElement;
+      const scrollable = doc.scrollHeight - doc.clientHeight;
+      setProgress(scrollable > 0 ? Math.min(1, doc.scrollTop / scrollable) : 0);
+    };
+
+    // The topmost section whose start is above the reading line wins. An
+    // intersection-ratio approach picks whichever section is *most* visible,
+    // which flickers between two when a short one sits fully inside the
+    // viewport next to a tall one.
+    const READING_LINE = 0.35;
+    const onSpy = () => {
+      const line = window.innerHeight * READING_LINE;
+      let current = "";
+      for (const el of sections) {
+        if (el.getBoundingClientRect().top <= line) current = el.id;
+      }
+      setActive(current);
+    };
+
+    const onBoth = () => {
+      onScroll();
+      onSpy();
+    };
+    onBoth();
+    window.addEventListener("scroll", onBoth, { passive: true });
+    window.addEventListener("resize", onBoth);
+    return () => {
+      window.removeEventListener("scroll", onBoth);
+      window.removeEventListener("resize", onBoth);
+    };
+  }, []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-hairline bg-page/70 backdrop-blur-xl backdrop-saturate-150">
+    <header className="sticky top-0 z-30 border-b border-hairline bg-page/70 backdrop-blur-xl backdrop-saturate-150 relative">
       <nav
         aria-label="Main"
         className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-5 sm:px-8"
@@ -31,16 +84,28 @@ export default function Nav() {
         </a>
 
         <ul className="hidden items-center gap-7 lg:flex">
-          {LINKS.map((l) => (
-            <li key={l.href}>
-              <a
-                href={l.href}
-                className="text-[13px] text-ink-2 transition-colors hover:text-ink"
-              >
-                {l.label}
-              </a>
-            </li>
-          ))}
+          {LINKS.map((l) => {
+            const isActive = active === l.href.slice(1);
+            return (
+              <li key={l.href}>
+                <a
+                  href={l.href}
+                  aria-current={isActive ? "true" : undefined}
+                  className={`relative text-[13px] transition-colors ${
+                    isActive ? "text-ink" : "text-ink-2 hover:text-ink"
+                  }`}
+                >
+                  {l.label}
+                  {isActive && (
+                    <span
+                      className="absolute -bottom-1.5 left-0 h-px w-full bg-accent"
+                      aria-hidden="true"
+                    />
+                  )}
+                </a>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="flex items-center gap-2">
@@ -89,6 +154,18 @@ export default function Nav() {
           </button>
         </div>
       </nav>
+
+      {/* How much is left. Sits on the header's bottom edge so it reads as part
+          of the chrome rather than as content. */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-px bg-transparent"
+        aria-hidden="true"
+      >
+        <div
+          className="h-full origin-left bg-accent transition-transform duration-150 ease-out"
+          style={{ transform: `scaleX(${progress})` }}
+        />
+      </div>
 
       {open && (
         <div id="mobile-nav" className="border-t border-hairline lg:hidden">
