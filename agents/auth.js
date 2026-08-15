@@ -99,9 +99,14 @@ export async function issueKey({ name, label = "default" }) {
   );
 
   const { key, hash, prefix } = generateKey();
-  await query(
+  // RETURNING the limits rather than letting the caller state them. They are
+  // column defaults, so anything quoted elsewhere is a second copy that drifts
+  // the moment the default changes — which is exactly what happened: the API
+  // advertised 2,000 calls and $5 for a week after the column said otherwise.
+  const { rows: k } = await query(
     `INSERT INTO api_key (tenant_id, key_hash, key_prefix, label)
-     VALUES ($1, $2, $3, $4)`,
+     VALUES ($1, $2, $3, $4)
+     RETURNING daily_call_limit, daily_usd_limit`,
     [t[0].id, hash, prefix, String(label).slice(0, 40)],
   );
 
@@ -109,6 +114,10 @@ export async function issueKey({ name, label = "default" }) {
     key, // the only time this value exists outside the caller's hands
     prefix,
     tenant: { id: t[0].id, slug: t[0].slug },
+    limits: {
+      dailyCalls: Number(k[0].daily_call_limit),
+      dailyUsd: Number(k[0].daily_usd_limit),
+    },
   };
 }
 

@@ -34,14 +34,28 @@ import { resolveCaller, issueKey, ensureTenantAgent } from "../agents/auth.js";
 import { handleChangefeed } from "./cdc.js";
 import { createHash, randomUUID } from "node:crypto";
 
-/** Hard daily ceilings. Breaching either returns 429, never a surprise bill. */
-const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT ?? 400);
-const DAILY_USD_LIMIT = Number(process.env.DAILY_USD_LIMIT ?? 3);
+/**
+ * Daily ceilings, set for the judging period.
+ *
+ * These are deliberately far above any load judging can produce. An adjudication
+ * costs about $0.002, so the service-wide ceiling below is roughly 25,000
+ * rulings a day — more than every judge in the hackathon could generate if they
+ * each ran the demo continuously. A judge must never meet a 429.
+ *
+ * They are not removed, and that is a considered choice rather than caution.
+ * /v1/demo and /v1/keys are unauthenticated so that a passer-by can evaluate the
+ * project without asking anyone's permission, which means a crawler or a single
+ * bad script has the same access. Uncapped, that is somebody's real money with
+ * no upper bound and nobody watching for a month. A ceiling nobody legitimate
+ * can reach costs nothing and bounds the worst case.
+ */
+const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT ?? 3000);
+const DAILY_USD_LIMIT = Number(process.env.DAILY_USD_LIMIT ?? 10);
 /**
  * The ceiling across every tenant combined. Per-tenant limits bound one
  * caller; this bounds all of them, which is the number that appears on a bill.
  */
-const GLOBAL_USD_LIMIT = Number(process.env.GLOBAL_USD_LIMIT ?? 12);
+const GLOBAL_USD_LIMIT = Number(process.env.GLOBAL_USD_LIMIT ?? 50);
 
 /**
  * Model tiers a caller may select for adjudication.
@@ -784,7 +798,8 @@ async function bufferedHandler(event) {
         key: issued.key,
         prefix: issued.prefix,
         tenant: issued.tenant,
-        limits: { dailyCalls: 2000, dailyUsd: 5 },
+        // Reported from the row that was just written, not from a copy here.
+        limits: issued.limits,
         warning:
           "This is the only time the key is shown. Only a SHA-256 of it is stored, so it cannot be recovered — issue a new one if lost.",
         usage: `curl -H 'authorization: Bearer ${issued.prefix}...' ${process.env.PUBLIC_BASE_URL ?? ""}/v1/commits`,

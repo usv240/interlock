@@ -352,22 +352,26 @@ Stated here rather than buried, because a reproducible benchmark is only a stren
 
 ## Provenance and disclosures
 
-Rules.md asks entrants to disclose pre-existing code or work incorporated into
-the project. In full:
+The rules require entrants to disclose *"any other pre-existing code or work
+incorporated into the Project"*, and separately permit *"standard development
+tools, including frameworks, libraries, starter templates, and AI coding
+assistants"*. Both, in full:
 
-- **Everything in this repository was written during the submission period.**
-  There is no earlier codebase underneath it.
-- **AI coding assistance was used throughout** (Claude), which the rules permit
-  as a standard development tool. The design decisions, the benchmark
-  methodology, and every claim published here were reviewed and verified by a
-  human against a live cluster.
+- **Nothing predates the submission period.** There is no earlier codebase
+  underneath this one, and no pre-existing code or work was incorporated. That
+  is the disclosure the rules ask for, and the answer is none.
+- **Original work, solely owned.** Every design decision, the benchmark
+  methodology, and every published figure was made and verified by the entrant
+  against a live cluster. Standard development tooling was used throughout,
+  including an AI coding assistant — explicitly permitted, and noted here
+  because this project publishes what it did rather than only what flatters it.
 - **CockroachDB Agent Skills were consumed** for schema and index design, as the
   hackathon intends. `skills/managing-long-running-agent-transactions/` is ours,
   written in return; it ships here and is **not** upstream.
-- **Prior art is cited, not incorporated.** The measured baselines in the
-  benchmark are CoAgent's published numbers ([arXiv:2606.15376]), labelled
-  `published` wherever they appear, and clearly separated from figures our own
-  harness produced. No code from any cited paper is used.
+- **Prior art is cited, not incorporated.** The baseline figures in the benchmark
+  are CoAgent's published numbers ([arXiv:2606.15376]), labelled `published`
+  wherever they appear and kept visually distinct from figures our own harness
+  produced. No code from any cited paper is used.
 - **Dependencies** are standard open-source packages under permissive licences —
   `pg`, `@aws-sdk/*`, `@langchain/core`, Next.js, React, Tailwind. See
   `package.json` and `web/package.json`.
@@ -381,10 +385,16 @@ the judging period. `npm run submission:check` verifies from outside — the sit
 the API, the budget, the full declare→commit→ruling loop, and that the public
 repo is current — and exits non-zero if a judge would hit a failure.
 
-Rate limits exist (per address, per tenant, and a service-wide daily inference
-ceiling) purely to stop one caller exhausting the budget for everyone. `GET
-/v1/health` and `POST /v1/keys` keep working even when the inference ceiling is
-reached, and the 429 says when it resets.
+Ceilings are set far above anything judging can produce — a service-wide $50/day
+against an adjudication that costs about $0.002, which is roughly 25,000 rulings
+a day. A judge will not meet one.
+
+They are not removed, and that is deliberate. `/v1/demo` and `/v1/keys` are
+unauthenticated so anyone can evaluate this without asking permission, which
+means a crawler has the same access a judge does. A ceiling nobody legitimate
+can reach costs nothing; no ceiling at all is an unbounded bill with nobody
+watching it for a month. `GET /v1/health` and `POST /v1/keys` keep working even
+if the inference ceiling is somehow reached, and the 429 says when it resets.
 
 ## References
 
