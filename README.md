@@ -232,6 +232,7 @@ region.
 | `npm run verify` | Proves a key is authenticated, isolated and metered |
 | `npm run example:langchain` | Two LangChain agents contending over one queue |
 | `npm run test:sdk` | 13 contract checks against the live endpoint |
+| `npm run submission:check` | Is everything a judge can touch still working? |
 
 **Needs your own cluster** (see [SETUP.md](SETUP.md)):
 
@@ -348,6 +349,42 @@ Stated here rather than buried, because a reproducible benchmark is only a stren
 5. **Energy figures are estimates.** A single coefficient (Wh per 1k tokens) is applied uniformly to every mode. The absolute number may be wrong; the *comparison* stays valid because every mode is multiplied by the same figure. Override with `ENERGY_WH_PER_1K_TOKENS`.
 
 ---
+
+## Provenance and disclosures
+
+Rules.md asks entrants to disclose pre-existing code or work incorporated into
+the project. In full:
+
+- **Everything in this repository was written during the submission period.**
+  There is no earlier codebase underneath it.
+- **AI coding assistance was used throughout** (Claude), which the rules permit
+  as a standard development tool. The design decisions, the benchmark
+  methodology, and every claim published here were reviewed and verified by a
+  human against a live cluster.
+- **CockroachDB Agent Skills were consumed** for schema and index design, as the
+  hackathon intends. `skills/managing-long-running-agent-transactions/` is ours,
+  written in return; it ships here and is **not** upstream.
+- **Prior art is cited, not incorporated.** The measured baselines in the
+  benchmark are CoAgent's published numbers ([arXiv:2606.15376]), labelled
+  `published` wherever they appear, and clearly separated from figures our own
+  harness produced. No code from any cited paper is used.
+- **Dependencies** are standard open-source packages under permissive licences —
+  `pg`, `@aws-sdk/*`, `@langchain/core`, Next.js, React, Tailwind. See
+  `package.json` and `web/package.json`.
+
+[arXiv:2606.15376]: https://arxiv.org/abs/2606.15376
+
+## Availability for judging
+
+The demo and API are free, unauthenticated where it matters, and stay up through
+the judging period. `npm run submission:check` verifies from outside — the site,
+the API, the budget, the full declare→commit→ruling loop, and that the public
+repo is current — and exits non-zero if a judge would hit a failure.
+
+Rate limits exist (per address, per tenant, and a service-wide daily inference
+ceiling) purely to stop one caller exhausting the budget for everyone. `GET
+/v1/health` and `POST /v1/keys` keep working even when the inference ceiling is
+reached, and the 429 says when it resets.
 
 ## References
 

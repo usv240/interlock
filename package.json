@@ -37,7 +37,8 @@
     "quickstart": "node scripts/quickstart.js",
     "test:tiers": "node scripts/test-tiers.js",
     "verify": "node scripts/verify-key.js",
-    "compare": "node scripts/compare.js"
+    "compare": "node scripts/compare.js",
+    "submission:check": "node scripts/submission-check.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
