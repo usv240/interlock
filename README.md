@@ -385,16 +385,32 @@ the judging period. `npm run submission:check` verifies from outside — the sit
 the API, the budget, the full declare→commit→ruling loop, and that the public
 repo is current — and exits non-zero if a judge would hit a failure.
 
-Ceilings are set far above anything judging can produce — a service-wide $50/day
-against an adjudication that costs about $0.002, which is roughly 25,000 rulings
-a day. A judge will not meet one.
+Ceilings are set far above anything judging can produce and are visible on
+`GET /v1/health`:
+
+| Scope | Ceiling | Roughly |
+|---|---|---|
+| Anonymous, per address | 3,000 calls · $10/day | more than a person can click |
+| Per key, per tenant | 10,000 calls · $25/day | more than a fleet needs |
+| Everyone, per day | $50 | ~25,000 adjudications |
+| **Everyone, per month** | **$25** | **~12,000 adjudications** |
+
+The monthly figure is the one that bounds a bill, and it is deliberately the
+tightest. Daily caps reset, so on their own they bound nothing anybody is ever
+charged for — $50 a day is $1,500 a month, and each day would report itself as
+working the whole way. Judging realistically costs a few dollars: a hundred
+judges running the demo twenty times each is about $4.
 
 They are not removed, and that is deliberate. `/v1/demo` and `/v1/keys` are
 unauthenticated so anyone can evaluate this without asking permission, which
 means a crawler has the same access a judge does. A ceiling nobody legitimate
 can reach costs nothing; no ceiling at all is an unbounded bill with nobody
-watching it for a month. `GET /v1/health` and `POST /v1/keys` keep working even
-if the inference ceiling is somehow reached, and the 429 says when it resets.
+watching it for a month.
+
+This is enforcement rather than warning — every Bedrock call goes through the
+handler that checks it. AWS Budgets, by comparison, only email. `GET /v1/health`
+and `POST /v1/keys` keep working if a ceiling is reached, and the 429 says which
+one and when it resets.
 
 ## References
 

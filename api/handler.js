@@ -58,6 +58,27 @@ const DAILY_USD_LIMIT = Number(process.env.DAILY_USD_LIMIT ?? 10);
 const GLOBAL_USD_LIMIT = Number(process.env.GLOBAL_USD_LIMIT ?? 50);
 
 /**
+ * The ceiling that bounds the bill, as opposed to the day.
+ *
+ * Every other limit here resets at midnight, which means none of them bound
+ * anything that appears on an invoice: a $50 day is a $1,500 month, and the
+ * daily caps would each report themselves as working the whole way. Judging runs
+ * for four weeks with nobody watching, so the month is the number that matters.
+ *
+ * $25 is roughly twelve thousand adjudications at about $0.002 each. Judging
+ * realistically costs a few dollars — a hundred judges running the demo twenty
+ * times each is around $4 — so this is six times the plausible load and still a
+ * number nobody minds seeing on a card.
+ *
+ * This is the enforcement, not a warning. Every Bedrock call this project makes
+ * goes through this handler, so a ceiling here is a ceiling on the spend. AWS
+ * Budgets, by contrast, only email: the account has three of them and not one
+ * can stop anything. The single budget action that exists applies to a different
+ * project's role.
+ */
+const MONTHLY_USD_LIMIT = Number(process.env.MONTHLY_USD_LIMIT ?? 25);
+
+/**
  * Model tiers a caller may select for adjudication.
  *
  * Named by role rather than by model id. A caller asking for "a bigger model
@@ -328,15 +349,27 @@ function ago(when) {
  * ceiling only needs to stop the *next* call once the total is already past it.
  */
 async function assertGlobalBudget() {
+  // Both windows in one round trip. The daily figure is what a caller sees on
+  // /v1/health; the monthly one is what protects the card.
   const { rows } = await query(
-    `SELECT usd_micros FROM api_quota
-     WHERE day = current_date() AND bucket = 'global'`,
+    `SELECT
+       coalesce(sum(usd_micros) FILTER (WHERE day = current_date()), 0) AS today,
+       coalesce(sum(usd_micros) FILTER (WHERE day >= date_trunc('month', current_date())), 0) AS month
+     FROM api_quota
+     WHERE bucket = 'global'`,
   );
-  const usd = Number(rows[0]?.usd_micros ?? 0) / 1e6;
+  const usd = Number(rows[0]?.today ?? 0) / 1e6;
+  const monthUsd = Number(rows[0]?.month ?? 0) / 1e6;
+
+  if (monthUsd >= MONTHLY_USD_LIMIT) {
+    return { ok: false, window: "month", usd: monthUsd, limit: MONTHLY_USD_LIMIT };
+  }
   return {
     ok: usd < GLOBAL_USD_LIMIT,
+    window: "day",
     usd,
     limit: GLOBAL_USD_LIMIT,
+    monthUsd,
   };
 }
 
@@ -631,6 +664,7 @@ async function bufferedHandler(event) {
          WHERE day = current_date() AND bucket = 'global'`,
       );
       const services = await serviceStatus();
+      const budget = await assertGlobalBudget();
       await logRequest(path, hash, 200, Date.now() - started, 0);
       return json(200, {
         ok: true,
@@ -648,10 +682,13 @@ async function bufferedHandler(event) {
           callLimit: DAILY_CALL_LIMIT,
           usdToday: Number(rows[0]?.usd_micros ?? 0) / 1e6,
           usdLimit: DAILY_USD_LIMIT,
-          // The ceiling across every tenant combined — the one that actually
-          // bounds the bill, and the one that refuses you even with budget left.
+          // The ceilings across every tenant combined. The monthly one is the
+          // figure that bounds an invoice; daily caps reset, so on their own
+          // they bound nothing that anybody ever gets charged for.
           globalUsdToday: Number(rows[0]?.usd_micros ?? 0) / 1e6,
           globalUsdLimit: GLOBAL_USD_LIMIT,
+          globalUsdMonth: Number(budget.monthUsd ?? 0),
+          globalUsdMonthLimit: MONTHLY_USD_LIMIT,
         },
         /**
          * Which model arbitrates, and what a caller may ask for.
@@ -821,14 +858,19 @@ async function bufferedHandler(event) {
     const global = await assertGlobalBudget();
     if (!global.ok) {
       await logRequest(path, hash, 429, Date.now() - started, 0, {
-        reason: "global spend limit",
+        reason: `global ${global.window} spend limit`,
       });
       return json(429, {
         ok: false,
         error:
-          `The service has spent its daily inference budget ` +
-          `($${global.usd.toFixed(2)} of $${global.limit}). It resets at ` +
-          `midnight UTC. GET /v1/health and POST /v1/keys still work.`,
+          global.window === "month"
+            ? `The service has spent its monthly inference budget ` +
+              `($${global.usd.toFixed(2)} of $${global.limit}). It resets on the ` +
+              `1st. GET /v1/health and POST /v1/keys still work, and the whole ` +
+              `mechanism is reproducible locally — see the repository README.`
+            : `The service has spent its daily inference budget ` +
+              `($${global.usd.toFixed(2)} of $${global.limit}). It resets at ` +
+              `midnight UTC. GET /v1/health and POST /v1/keys still work.`,
       });
     }
 
