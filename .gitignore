@@ -56,3 +56,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 yarn-error.log*
+
+# Personal recording notes — the shooting script, not the submission.
+VIDEO-SHOOTING-SCRIPT.md
