@@ -373,20 +373,36 @@ async function assertGlobalBudget() {
   };
 }
 
+/**
+ * Charge a call to its own bucket and to the service-wide total.
+ *
+ * UPSERT, not UPDATE, and that distinction was a silent hole for the entire life
+ * of this file. `reserveQuota` creates a row for the caller's own bucket before
+ * every request, so updating that one worked. Nothing ever created the `global`
+ * row — no code path calls reserveQuota('global') — so the second statement
+ * updated zero rows every single time and threw nothing.
+ *
+ * The result: 116 model-backed rulings on the ledger and a service-wide total of
+ * $0.0000. The daily ceiling, and the monthly ceiling built on top of it, were
+ * both reading a number that could only ever be zero. Two caps, neither able to
+ * fire, both reporting themselves healthy on /v1/health.
+ *
+ * An UPDATE that matches nothing is not an error in SQL. That is exactly why it
+ * has to be an UPSERT: the row's existence must not be an assumption.
+ */
 async function recordSpend(bucket, usage) {
   const micros = Math.round(usage.usd * 1e6);
-  await query(
-    `UPDATE api_quota
-     SET tokens = tokens + $2, usd_micros = usd_micros + $3, updated_at = now()
-     WHERE day = current_date() AND bucket = $1`,
-    [bucket, usage.tokensTotal, micros],
-  );
-  await query(
-    `UPDATE api_quota
-     SET tokens = tokens + $1, usd_micros = usd_micros + $2, updated_at = now()
-     WHERE day = current_date() AND bucket = 'global'`,
-    [usage.tokensTotal, micros],
-  );
+  for (const b of [bucket, "global"]) {
+    await query(
+      `INSERT INTO api_quota (day, bucket, calls, tokens, usd_micros)
+       VALUES (current_date(), $1, 0, $2, $3)
+       ON CONFLICT (day, bucket) DO UPDATE
+       SET tokens = api_quota.tokens + EXCLUDED.tokens,
+           usd_micros = api_quota.usd_micros + EXCLUDED.usd_micros,
+           updated_at = now()`,
+      [b, usage.tokensTotal, micros],
+    );
+  }
 }
 
 async function logRequest(route, hash, status, ms, tokens, detail = {}) {

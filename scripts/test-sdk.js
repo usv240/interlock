@@ -79,6 +79,22 @@ await check("health reports topology", async () => {
   truthy(h.topology?.regions?.length >= 1, "regions");
 });
 
+await check("spending money moves the service-wide ledger", async () => {
+  // The ceilings are only real if the number they read actually rises. It did
+  // not for the entire life of the feature: recordSpend UPDATEd a `global` row
+  // that nothing ever INSERTed, so 116 rulings recorded $0.0000 and both the
+  // daily and monthly caps were reading a constant zero while reporting healthy.
+  //
+  // Asserting the request succeeded would not have caught it. Only the delta does.
+  const before = (await client.health()).quota.globalUsdMonth ?? 0;
+  await client.demo();
+  const after = (await client.health()).quota.globalUsdMonth ?? 0;
+  truthy(
+    after > before,
+    `service-wide spend did not move (${before} -> ${after}) — the budget ceiling cannot fire`,
+  );
+});
+
 /* ------------------------------------------------------------ registration */
 
 let agent, queue;
