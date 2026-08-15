@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ThemeToggle from "./ThemeToggle";
+import ServiceStatus from "./ServiceStatus";
 import { REPO_URL } from "@/lib/content";
 
 const LINKS = [
@@ -115,11 +116,13 @@ export default function Nav() {
         </ul>
 
         <div className="flex items-center gap-2">
+          {/* Live, not decorative — see ServiceStatus. */}
+          <ServiceStatus />
           <a
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
-            className="hidden h-9 items-center rounded-md px-2.5 text-[13px] text-ink-2 transition-colors hover:text-ink md:inline-flex"
+            className="hidden h-9 items-center rounded-md px-2.5 text-[13px] text-ink-2 transition-colors hover:text-ink lg:inline-flex"
           >
             GitHub
           </a>
