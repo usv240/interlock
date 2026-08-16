@@ -299,10 +299,15 @@ console.log(
       `  without asking a model. Optimistic concurrency cannot tell "this row moved"\n` +
       `  from "this row matters", so it throws the task away either way.\n` +
       `\n` +
+      // The losing branch used to read "The second is the case that costs
+      // something. Here it does not:" — where "it" was meant to point at
+      // "beats re-running", a phrase that only exists in the winning branch.
+      // Read aloud it says the opposite of what is meant. Each branch now
+      // carries its own verb.
       `  The second is the case that costs something. ${
         saved > 0
           ? "Here it still beats re-running."
-          : `Here it does not: at ${num(REASONING)} tokens\n  there is not enough reasoning at stake to be worth protecting.`
+          : `Here it does not beat re-running:\n  at ${num(REASONING)} tokens there is not enough reasoning at stake to protect.`
       }\n`,
   ),
 );
