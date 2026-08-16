@@ -30,16 +30,24 @@ const fail = (s) => {
   failures += 1;
 };
 
-const key = process.argv[2] ?? process.env.INTERLOCK_KEY;
+let key = process.argv[2] ?? process.env.INTERLOCK_KEY;
 
+/*
+ * Issue one if none is given, like `quickstart` and `compare` do.
+ *
+ * Refusing to start was defensible when this only checked a key you already
+ * held. It stopped being defensible once the submission document listed
+ * `npm run verify` as one of three commands a judge should run — a judge
+ * following that instruction got exit code 1 and no explanation of what the
+ * tool would have shown them.
+ *
+ * Checking a freshly issued key is still a real check: it proves issuance,
+ * authentication, isolation and metering all work end to end, which is most of
+ * what the command exists to prove.
+ */
 if (!key) {
-  console.error(
-    `\n${y("No key given.")}\n\n` +
-      `  npm run verify -- ilk_your_key_here\n\n` +
-      `Get one at https://d3dgn014prmcy8.cloudfront.net/#use-it, or run\n` +
-      `npm run quickstart, which issues a throwaway key and uses it.\n`,
-  );
-  process.exit(1);
+  console.log(dim("No key given, issuing a throwaway one…\n"));
+  key = (await Interlock.issueKey({ name: "Verification", label: "verify" })).key;
 }
 
 if (!key.startsWith("ilk_")) {

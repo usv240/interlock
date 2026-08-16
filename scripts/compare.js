@@ -45,7 +45,7 @@ const flag = (name, fallback) => {
   return i === -1 ? fallback : Number(argv[i + 1]);
 };
 
-const key = argv.find((a) => a.startsWith("ilk_")) ?? process.env.INTERLOCK_KEY;
+let key = argv.find((a) => a.startsWith("ilk_")) ?? process.env.INTERLOCK_KEY;
 /** Tokens the interrupted agent had already spent thinking. Yours, not ours. */
 const REASONING = flag("reasoning", 12_500);
 /** Published Bedrock rate for the tier this demo's agent would use. */
@@ -55,12 +55,20 @@ const usd = (tokens) => (tokens / 1000) * USD_PER_1K;
 const money = (n) => `$${n.toFixed(4)}`;
 const num = (n) => n.toLocaleString();
 
+/*
+ * Issue a throwaway key when none is given, exactly as `quickstart` does.
+ *
+ * This used to refuse to start without one, while the README, the submission
+ * document and the walkthrough script all invite the reader to run a bare
+ * `npm run compare`. Three places pointing at a command that exits 1 — and the
+ * first person to find out was someone about to record it.
+ *
+ * A demo that demands setup before it will show you anything is a demo most
+ * people never see.
+ */
 if (!key) {
-  console.error(
-    `\n${y("Needs a key.")}  npm run compare -- ilk_your_key_here\n` +
-      `Get one at https://d3dgn014prmcy8.cloudfront.net/#use-it\n`,
-  );
-  process.exit(1);
+  console.log(dim("  No key given, issuing a throwaway one…"));
+  key = (await Interlock.issueKey({ name: "Compare", label: "compare" })).key;
 }
 
 const il = new Interlock({ apiKey: key });
