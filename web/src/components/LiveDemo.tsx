@@ -61,8 +61,30 @@ const VERDICT_TONE: Record<string, string> = {
   fatal: "text-critical border-critical/40",
 };
 
-function Mono({ children, label }: { children: React.ReactNode; label: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * A collapsible panel of the exact text that executed.
+ *
+ * `defaultOpen` exists because collapsing all of them buried the best thing on
+ * the page. The strongest evidence this project has is that real SQL —
+ * `AS OF SYSTEM TIME` against a genuine HLC timestamp, a recursive CTE, a vector
+ * operator — ran against CockroachDB a second ago. Behind a "show" link, most
+ * readers never learn it is there, and the ones who do have already decided
+ * whether to believe the page.
+ *
+ * So the short, striking ones open themselves and the long ones stay shut. One
+ * open panel tells a reader the rest are real; five open panels are a wall of
+ * text nobody reads.
+ */
+function Mono({
+  children,
+  label,
+  defaultOpen = false,
+}: {
+  children: React.ReactNode;
+  label: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="mt-2 overflow-hidden rounded-lg border border-hairline bg-surface-2">
       <button
@@ -334,7 +356,16 @@ export default function LiveDemo() {
 
                     {after.map((e) => {
                       if (e.t === "sql")
-                        return <Mono key={e.seq} label="SQL that ran">{e.sql}</Mono>;
+                        // The time-travel query opens itself. It is three lines long, it carries
+        // a real HLC timestamp, and it is the single clearest piece of evidence
+        // on this page that CockroachDB is doing the work rather than storing
+        // the result. The detection CTE stays shut — it is forty lines, and a
+        // reader who wants it now knows to look.
+        return (
+          <Mono key={e.seq} label="SQL that ran" defaultOpen={e.id === "diff"}>
+            {e.sql}
+          </Mono>
+        );
 
                       if (e.t === "prompt")
                         return (
