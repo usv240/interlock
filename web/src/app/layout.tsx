@@ -44,10 +44,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f5f1" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0f17" },
-  ],
+  // Light is the site's default, so it is also the default browser chrome
+  // colour. The dark entry only applies once someone has actually chosen dark.
+  themeColor: "#f6f5f1",
 };
 
 /**
@@ -67,9 +66,12 @@ const noFlashTheme = `
     if (q !== 'light' && q !== 'dark') q = null;
     if (q) localStorage.setItem('interlock-theme', q);
 
-    var stored = q || localStorage.getItem('interlock-theme');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var theme = stored || (prefersDark ? 'dark' : 'light');
+    // Light is the default for a first-time visitor, regardless of their OS
+    // setting. A deliberate product choice: this page is read by people
+    // evaluating it once, often on a projector or an embedded video, and the
+    // light theme survives both better. An explicit choice still wins, and
+    // still persists — we override the OS default, never the person.
+    var theme = q || localStorage.getItem('interlock-theme') || 'light';
     document.documentElement.setAttribute('data-theme', theme);
   } catch (e) {
     document.documentElement.setAttribute('data-theme', 'light');
