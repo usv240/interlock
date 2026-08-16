@@ -312,16 +312,30 @@ console.log(
  * Quoting this figure as "the crossover" would put a flattering number next to
  * the same words the site uses for a harder one. So it is named for what it is.
  */
+/*
+ * Both crossovers, side by side, in the same eyeline.
+ *
+ * Two different numbers describe "where this starts paying", and a reader who
+ * meets them apart concludes one of them is wrong. Printed together, with what
+ * each measures, the difference is obviously deliberate rather than a
+ * contradiction — and the favourable one is the one labelled as favourable.
+ */
+console.log(
+  `  ${b("Two crossovers, and they are not the same number:")}\n\n` +
+    `    ${y("this pair")}        break-even ~${b(num(Math.round(breakEven)))} tokens/task   ` +
+    dim("← favourable: 1 of 2 collisions was free") +
+    `\n` +
+    `    ${g("full workload")}    crossover  ~${b("12,000")} tokens/task   ` +
+    dim("← the published number") +
+    `\n`,
+);
 console.log(
   dim(
-    `  ${b("Break-even for this pair")}: about ${b(num(Math.round(breakEven)))} tokens per task.\n` +
-      `  It is low because one of these two collisions costs nothing — a demo gets to\n` +
-      `  pick its collisions, and this one picked a favourable pair on purpose.\n` +
-      `\n` +
-      `  ${b("The published crossover is ~12,000 tokens")}, from a six-agent contended\n` +
-      `  workload where the conflict mix is not chosen: ${b("npm run bench:sweep")}. That is\n` +
-      `  the number on the site, and the one to believe. Below it, do not use this —\n` +
-      `  just retry. The curve publishes that losing region rather than cropping it.\n` +
+    `  A demo gets to pick its collisions and this one picked well, so its\n` +
+      `  break-even sits far below the real thing. ${b("~12,000 is the number to believe")}:\n` +
+      `  it comes from a six-agent contended workload where the conflict mix is\n` +
+      `  whatever the workload produces — ${b("npm run bench:sweep")}. Below it, do not use\n` +
+      `  this; just retry. The curve on the site publishes that losing region.\n` +
       `\n` +
       `  ${b("Measured live:")} detection, both verdicts, which steps died, what the\n` +
       `  adjudication cost. ${b("Assumed:")} ${num(REASONING)} tokens of reasoning at $${USD_PER_1K}/1k —\n` +
