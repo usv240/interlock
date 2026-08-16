@@ -95,12 +95,23 @@ export const APPROACHES: Approach[] = [
  */
 export const CROSSOVER = {
   unit: "tokens of reasoning per task",
+  // Re-measured after the adjudicator changes (cheap tier by default, the
+  // provenance pre-filter answering "irrelevant" with no inference). Four
+  // points now rather than three, because the extra one at 9,780 is the
+  // interesting one: it is where the two approaches are almost level, and a
+  // curve that jumps straight from -76% to +27% hides where the decision
+  // actually gets difficult.
   points: [
-    { reasoning: 3_357, occ: 2.04, interlock: 3.57, winner: "occ" as const },
-    { reasoning: 16_652, occ: 2.02, interlock: 1.59, winner: "interlock" as const },
-    { reasoning: 37_314, occ: 2.01, interlock: 1.28, winner: "interlock" as const },
+    { reasoning: 3_357, occ: 2.06, interlock: 3.61, winner: "occ" as const },
+    { reasoning: 9_780, occ: 2.03, interlock: 2.12, winner: "occ" as const },
+    { reasoning: 23_531, occ: 2.01, interlock: 1.47, winner: "interlock" as const },
+    { reasoning: 37_307, occ: 2.01, interlock: 1.31, winner: "interlock" as const },
   ],
-  crossoverAt: 15_000,
+  // Interpolated between the two points that straddle it: at 9,780 INTERLOCK is
+  // 0.09x worse, at 23,531 it is 0.54x better. Published as ~12,000 rather than
+  // the precise interpolation, because four sampled points do not justify four
+  // significant figures.
+  crossoverAt: 12_000,
   anomalies: 0,
   provenance: "measured" as Provenance,
 };

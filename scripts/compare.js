@@ -295,11 +295,33 @@ console.log(
         saved > 0
           ? "Here it still beats re-running."
           : `Here it does not: at ${num(REASONING)} tokens\n  there is not enough reasoning at stake to be worth protecting.`
-      }\n` +
+      }\n`,
+  ),
+);
+
+/*
+ * Two different break-evens, and conflating them would be dishonest.
+ *
+ * This pair is a favourable construction: one of its two collisions is settled
+ * free by the graph, which halves the fixed cost and pulls break-even down to a
+ * few hundred tokens. The number the project publishes — around 12,000 — comes
+ * from `npm run bench:sweep`, a six-agent contended workload where the mix of
+ * relevant and irrelevant conflicts is whatever the workload produces rather
+ * than whatever a demo chose.
+ *
+ * Quoting this figure as "the crossover" would put a flattering number next to
+ * the same words the site uses for a harder one. So it is named for what it is.
+ */
+console.log(
+  dim(
+    `  ${b("Break-even for this pair")}: about ${b(num(Math.round(breakEven)))} tokens per task.\n` +
+      `  It is low because one of these two collisions costs nothing — a demo gets to\n` +
+      `  pick its collisions, and this one picked a favourable pair on purpose.\n` +
       `\n` +
-      `  Break-even is about ${b(num(Math.round(breakEven)))} tokens of reasoning per task on this run.\n` +
-      `  Below it, do not use this — just retry. The curve on the site shows the\n` +
-      `  losing region rather than cropping it out.\n` +
+      `  ${b("The published crossover is ~12,000 tokens")}, from a six-agent contended\n` +
+      `  workload where the conflict mix is not chosen: ${b("npm run bench:sweep")}. That is\n` +
+      `  the number on the site, and the one to believe. Below it, do not use this —\n` +
+      `  just retry. The curve publishes that losing region rather than cropping it.\n` +
       `\n` +
       `  ${b("Measured live:")} detection, both verdicts, which steps died, what the\n` +
       `  adjudication cost. ${b("Assumed:")} ${num(REASONING)} tokens of reasoning at $${USD_PER_1K}/1k —\n` +

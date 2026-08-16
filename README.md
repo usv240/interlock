@@ -136,12 +136,16 @@ INTERLOCK is **not always better**, and the honest claim is a regime rather than
 
 ```
 reasoning/task    OCC cost    INTERLOCK cost    winner      margin
- 3,357 tokens     2.04x       3.57x             OCC         -75%
-16,652 tokens     2.02x       1.59x             INTERLOCK   +21%
-37,314 tokens     2.01x       1.28x             INTERLOCK   +36%
+ 3,357 tokens     2.06x       3.61x             OCC         -76%
+ 9,780 tokens     2.03x       2.12x             OCC          -5%
+23,531 tokens     2.01x       1.47x             INTERLOCK   +27%
+37,307 tokens     2.01x       1.31x             INTERLOCK   +35%
 ```
 
-**Below roughly 15k tokens of reasoning per task, do not use this — just retry.**
+**Below roughly 12k tokens of reasoning per task, do not use this — just retry.**
+
+The 9,780 row is the one worth looking at: the two approaches are within 5% of
+each other, which is where the decision is genuinely hard rather than obvious.
 
 The reason is structural: adjudication costs roughly a fixed amount per conflict, while re-running a task costs in proportion to how much thinking it discards. Cheap tasks have nothing worth protecting. The saving grows with task cost.
 
@@ -340,7 +344,7 @@ If declaring fails, the callback warns and lets the run continue. A guard that b
 
 Stated here rather than buried, because a reproducible benchmark is only a strength if we stand behind what it prints.
 
-1. **INTERLOCK loses below the crossover.** Around 3.3k tokens of reasoning per task it costs 3.57× against optimistic concurrency's 2.04×. That is a real result and it is published above rather than tuned away.
+1. **INTERLOCK loses below the crossover.** Around 3.4k tokens of reasoning per task it costs 3.61x against optimistic concurrency's 2.06x. That is a real result and it is published above rather than tuned away.
 2. **The workload's dependency fraction and pass count are parameters we chose.** The first version had every step depend on the contended value — the worst possible case, and unrepresentative. Both are now explicit and swept, but they are still our choices, and the whole curve including the losing region is published so the choice is inspectable.
 3. **The vector index is selected only above a few thousand in-flight plans.** It is a *partial* index covering plans still in flight, because semantic detection never asks about resolved ones. At 1,695 live plans in a tenant the planner picks it — `npm run ai:vector` prints the plan and the tenant it probed. Below that a scan genuinely wins and CockroachDB is right to prefer it, so `npm run db:verify` also *forces* the index, which is the only way to tell one that is resting from one that is dead.
 
