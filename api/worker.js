@@ -36,10 +36,73 @@ import { processCommit } from "../agents/interlock.js";
 import { Usage } from "../agents/bedrock.js";
 import { query, closePool } from "../agents/db.js";
 
+/**
+ * The service-wide monthly ceiling, enforced here too.
+ *
+ * This worker spends money and has no HTTP caller, so none of the API's quota
+ * checks apply to it — and for the whole life of this file its inference was
+ * neither counted against the ceiling nor stopped by it. Every commit fans out
+ * to a changefeed, so the one path that runs *automatically*, at whatever rate
+ * traffic arrives, was the one path with no ceiling at all.
+ *
+ * Read straight from the ledger rather than passed in. A cap that only holds
+ * when someone remembers to plumb it through is not a cap.
+ */
+const MONTHLY_USD_LIMIT = Number(process.env.MONTHLY_USD_LIMIT ?? 25);
+
+async function budgetExhausted() {
+  try {
+    const { rows } = await query(
+      `SELECT coalesce(sum(usd_micros), 0) AS month
+       FROM api_quota
+       WHERE bucket = 'global' AND day >= date_trunc('month', current_date())`,
+    );
+    return Number(rows[0].month) / 1e6 >= MONTHLY_USD_LIMIT;
+  } catch {
+    // Fail open. A ledger we cannot read is not evidence of overspend, and
+    // stalling adjudication on a transient database blip would break the
+    // product to protect a budget that is probably fine.
+    return false;
+  }
+}
+
+/** Charge the worker's inference to the same ledger the API's ceiling reads. */
+async function recordWorkerSpend(usage) {
+  const micros = Math.round(usage.usd * 1e6);
+  if (micros <= 0) return;
+  for (const bucket of ["worker", "global"]) {
+    await query(
+      `INSERT INTO api_quota (day, bucket, calls, tokens, usd_micros)
+       VALUES (current_date(), $1, 0, $2, $3)
+       ON CONFLICT (day, bucket) DO UPDATE
+       SET tokens = api_quota.tokens + EXCLUDED.tokens,
+           usd_micros = api_quota.usd_micros + EXCLUDED.usd_micros,
+           updated_at = now()`,
+      [bucket, usage.tokensTotal, micros],
+    ).catch(() => {});
+  }
+}
+
 export const handler = async (event) => {
   const failures = [];
   const usage = new Usage("sqs-worker");
   let adjudicated = 0;
+
+  // Checked once per batch, not per message: the ceiling is a coarse bound and
+  // a query per message would cost more than it saves.
+  if (await budgetExhausted()) {
+    console.warn(
+      JSON.stringify({
+        skipped: event.Records?.length ?? 0,
+        reason: `monthly inference budget of $${MONTHLY_USD_LIMIT} reached`,
+      }),
+    );
+    // Nothing is returned as a failure. These messages are dropped rather than
+    // retried: replaying them next month would adjudicate stale commits, and
+    // the UNIQUE index already makes a missed ruling recoverable rather than
+    // corrupting anything.
+    return { batchItemFailures: [] };
+  }
 
   for (const record of event.Records ?? []) {
     let commitId;
@@ -84,6 +147,9 @@ export const handler = async (event) => {
       failures.push({ itemIdentifier: record.messageId });
     }
   }
+
+  // Charge before returning, so the next batch sees this one's spend.
+  await recordWorkerSpend(usage);
 
   const u = usage.toJSON();
   console.log(

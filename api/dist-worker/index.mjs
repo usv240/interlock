@@ -6487,10 +6487,48 @@ async function processCommit(commitId, { usage, tier = null } = {}) {
 }
 
 // api/worker.js
+var MONTHLY_USD_LIMIT = Number(process.env.MONTHLY_USD_LIMIT ?? 25);
+async function budgetExhausted() {
+  try {
+    const { rows } = await query(
+      `SELECT coalesce(sum(usd_micros), 0) AS month
+       FROM api_quota
+       WHERE bucket = 'global' AND day >= date_trunc('month', current_date())`
+    );
+    return Number(rows[0].month) / 1e6 >= MONTHLY_USD_LIMIT;
+  } catch {
+    return false;
+  }
+}
+async function recordWorkerSpend(usage) {
+  const micros = Math.round(usage.usd * 1e6);
+  if (micros <= 0) return;
+  for (const bucket of ["worker", "global"]) {
+    await query(
+      `INSERT INTO api_quota (day, bucket, calls, tokens, usd_micros)
+       VALUES (current_date(), $1, 0, $2, $3)
+       ON CONFLICT (day, bucket) DO UPDATE
+       SET tokens = api_quota.tokens + EXCLUDED.tokens,
+           usd_micros = api_quota.usd_micros + EXCLUDED.usd_micros,
+           updated_at = now()`,
+      [bucket, usage.tokensTotal, micros]
+    ).catch(() => {
+    });
+  }
+}
 var handler = async (event) => {
   const failures = [];
   const usage = new Usage("sqs-worker");
   let adjudicated = 0;
+  if (await budgetExhausted()) {
+    console.warn(
+      JSON.stringify({
+        skipped: event.Records?.length ?? 0,
+        reason: `monthly inference budget of $${MONTHLY_USD_LIMIT} reached`
+      })
+    );
+    return { batchItemFailures: [] };
+  }
   for (const record of event.Records ?? []) {
     let commitId;
     try {
@@ -6529,6 +6567,7 @@ var handler = async (event) => {
       failures.push({ itemIdentifier: record.messageId });
     }
   }
+  await recordWorkerSpend(usage);
   const u = usage.toJSON();
   console.log(
     JSON.stringify({
