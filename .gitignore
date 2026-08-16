@@ -59,3 +59,6 @@ yarn-error.log*
 
 # Personal recording notes — the shooting script, not the submission.
 VIDEO-SHOOTING-SCRIPT.md
+
+# Throwaway diagnostic scripts
+scripts/probe-tmp.mjs
