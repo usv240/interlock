@@ -38,7 +38,8 @@
     "test:tiers": "node scripts/test-tiers.js",
     "verify": "node scripts/verify-key.js",
     "compare": "node scripts/compare.js",
-    "submission:check": "node scripts/submission-check.js"
+    "submission:check": "node scripts/submission-check.js",
+    "revoke:key": "node scripts/revoke-key.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1107.0",
