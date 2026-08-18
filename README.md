@@ -140,43 +140,30 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    subgraph yours["Your side, we never see your reasoning"]
-        AGENT["Your agent<br/>your models, prompts and tools"]
-        SDK["INTERLOCK SDK<br/>dependency free client<br/>or LangChain callback"]
-        AGENT --> SDK
+    subgraph yours["Your side · we never see your reasoning"]
+        direction LR
+        AGENT["Your agent<br/>your models and prompts"] --> SDK["INTERLOCK SDK<br/>client or LangChain callback"]
     end
 
     subgraph aws["AWS"]
-        API["AWS Lambda<br/>public API on a function URL"]
-        WORKER["AWS Lambda worker<br/>async adjudication"]
-        QUEUE["EventBridge and SQS<br/>with a dead letter queue"]
-        BEDROCK["Amazon Bedrock<br/>Titan embeddings<br/>Claude on two tiers"]
-        SITE["S3 and CloudFront<br/>demo site, private origin"]
+        direction LR
+        API["Lambda · public API"]
+        BEDROCK["Bedrock<br/>Titan embeddings<br/>Claude adjudication<br/><i>only when the graph cannot rule</i>"]
+        ASYNC["EventBridge · SQS · worker Lambda"]
     end
 
-    subgraph crdb["CockroachDB, 3 regions, SURVIVE REGION FAILURE"]
-        INTENT["intent<br/>plan, read set, embedding"]
-        RES["resource<br/>versioned shared state"]
-        GRAPH["provenance graph<br/>walked by recursive CTE"]
-        VEC["C-SPANN vector index<br/>partial, tenant prefixed"]
-        ADJ["adjudication<br/>UNIQUE commit and intent"]
+    subgraph crdb["CockroachDB · 3 regions · SERIALIZABLE"]
+        direction LR
+        MEM["intent + resource<br/>plan, read set, embedding"] --> DETECT["who is threatened<br/>exact + graph + vector"]
+        DETECT --> TIME["AS OF SYSTEM TIME<br/>replay the agent's snapshot"]
+        TIME --> ADJ["adjudication<br/>exactly once"]
     end
 
-    SDK -->|declare intent| API
-    SDK -->|commit| API
-    API -->|embed the plan| BEDROCK
-    API --> INTENT
-    API --> RES
-    API -->|who is threatened| GRAPH
-    API --> VEC
-    API -->|time travel diff| RES
-    API -->|only what the graph could not settle| BEDROCK
-    API --> ADJ
-    RES -->|changefeed| QUEUE
-    QUEUE --> WORKER
-    WORKER --> BEDROCK
-    WORKER --> ADJ
-    SITE -.->|live demo calls| API
+    SDK --> API
+    API --> MEM
+    API --> BEDROCK
+    MEM -->|changefeed| ASYNC
+    ASYNC --> ADJ
 ```
 
 ---
@@ -212,7 +199,9 @@ What is actually load bearing:
 
 We also use changefeeds, row level TTL, recursive CTEs, follower reads on the audit feed, per table `gc.ttlseconds`, three different table localities (`GLOBAL`, `REGIONAL BY TABLE IN PRIMARY REGION`, and pinned), and a three region database with `SURVIVE REGION FAILURE`.
 
-That comes to 10 migrations, 15 tables, 1,801 intents, 878 provenance edges and 73 tenants.
+That comes to 11 migrations and 15 tables. The live data grows as people use the
+public demo, and at the time of writing sits at roughly 1,900 intents, 1,600
+provenance edges and 136 tenants.
 
 ## AWS services used
 
@@ -225,7 +214,7 @@ Only the services this project actually runs on. An earlier draft also listed EC
 | **Amazon EventBridge and SQS** | Async adjudication driven off a CockroachDB changefeed, with a dead letter queue and partial batch failure handling. |
 | **Amazon S3 and CloudFront** | Hosts the demo as a static export with a private origin. CloudFront only read via Origin Access Control, no public bucket policy. |
 | **Amazon CloudWatch** | A $20 budget alarm with three thresholds, plus the logs that caught a cold start syntax failure and a cross region IAM denial during the build. |
-| **AWS IAM** | The runtime role is scoped to five specific model ARNs rather than `bedrock:*`, with explicit denies on deleting evidence and altering model access. See [`infra/`](infra/). |
+| **AWS IAM** | The runtime role is scoped to nine specific model and inference profile ARNs rather than `bedrock:*`, with explicit denies on deleting evidence and altering model access. Nine rather than two because a `us.` inference profile dispatches across regions, so least privilege means naming the underlying model in every region it may route to. See [`infra/`](infra/). |
 
 ### One cross region IAM lesson worth recording
 

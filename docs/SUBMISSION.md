@@ -66,7 +66,7 @@ Correctness never rests on the model's judgement: the final write is a real `SER
 | **ccloud / Cloud API** | A continuity agent that **refuses to let adjudication run** if the cluster is not actually configured to survive a region, and reports `gc.ttlseconds` per table — the real ceiling on how far back a diff can read |
 | **Agent Skills** | Consumed for schema and index design. We wrote one in return — `skills/managing-long-running-agent-transactions/` — carrying the traps that cost us real time. It ships in this repo; it is **not** upstream, and we would rather say so than imply a merge that has not happened |
 
-Plus **changefeeds**, **row-level TTL**, **recursive CTEs**, **follower reads** on the audit feed, **per-table `gc.ttlseconds`**, three distinct **localities** (`GLOBAL`, `REGIONAL BY TABLE IN PRIMARY REGION`, pinned), and a 3-region **`SURVIVE REGION FAILURE`** database. 10 migrations, 15 tables, 1,801 intents, 878 provenance edges, 73 tenants.
+Plus **changefeeds**, **row-level TTL**, **recursive CTEs**, **follower reads** on the audit feed, **per-table `gc.ttlseconds`**, three distinct **localities** (`GLOBAL`, `REGIONAL BY TABLE IN PRIMARY REGION`, pinned), and a 3-region **`SURVIVE REGION FAILURE`** database. 11 migrations, 15 tables, and live data that grows with public demo use — roughly 1,900 intents, 1,600 provenance edges and 136 tenants at the time of writing.
 
 **AWS — only what we actually run on**
 
@@ -117,7 +117,7 @@ Bring-your-own-key, so a tenant can use their own model and their own bill — t
 
 | Criterion | Evidence |
 |---|---|
-| **Agentic Memory Design** | Memory *is* the mechanism, not the storage: intents, read-sets, a recursive provenance graph, embeddings, MVCC snapshots, bitemporal validity. 10 migrations, 15 tables, 1,801 intents, **~1,700 in-flight plans where the planner selects the vector index**, 3-region topology. Swap the database and the product stops existing |
+| **Agentic Memory Design** | Memory *is* the mechanism, not the storage: intents, read-sets, a recursive provenance graph, embeddings, MVCC snapshots, bitemporal validity. 11 migrations, 15 tables, **~1,700 in-flight plans where the planner selects the vector index**, 3-region topology. Swap the database and the product stops existing |
 | **Technological Implementation** | Recursive CTE ⨝ ANN ⨝ time-travel in one serializable transaction; async pipeline with DLQ and partial-batch failure; 13 SDK contract tests and 14 stranger tests against the deployed endpoint; twelve documented bug hunts, most of them silent failures |
 | **Real-World Impact** | Not "agent fleets" abstractly — **any system where an LLM writes to shared state**: coding agents touching one repo, ops automations touching one runbook, support bots touching one queue. Public API, self-serve keys, LangChain callback, and a published crossover so adopters know when *not* to use it |
 | **Product Readiness** | 3 regions + `SURVIVE REGION FAILURE`; chaos drill; exactly-once by constraint; **enforced** per-tenant *and* service-wide spend ceilings; least-privilege IAM with explicit denies; credential rotation with env sync; `npm run pipeline` health check; browser-level CORS regression harness |

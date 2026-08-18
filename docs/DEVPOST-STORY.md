@@ -41,7 +41,7 @@ We used all four of the sponsor tools:
 * **ccloud and the Cloud API.** A continuity agent that refuses to let adjudication run if the cluster is not genuinely configured to survive a region failure. It also reports `gc.ttlseconds` per table, which is the real ceiling on how far back a time travel diff can read.
 * **Agent Skills.** We used them for schema and index design, and wrote one back covering the traps that cost us real time. It ships in this repo. It is not upstream, and we would rather say that plainly than imply a merge that has not happened.
 
-We also lean on changefeeds, row level TTL, recursive CTEs, follower reads, per table `gc.ttlseconds`, three different table localities, and a three region database with `SURVIVE REGION FAILURE`. That comes to 10 migrations, 15 tables, 1,801 intents and 878 provenance edges.
+We also lean on changefeeds, row level TTL, recursive CTEs, follower reads, per table `gc.ttlseconds`, three different table localities, and a three region database with `SURVIVE REGION FAILURE`. That comes to 11 migrations and 15 tables. The data itself keeps growing as people use the public demo, and sits at roughly 1,900 intents and 1,600 provenance edges as I write this.
 
 **On AWS we used only what we actually run on.** Bedrock for Titan embeddings and Claude, with caller selectable tiers named by role rather than model id, so client code survives models being replaced. Lambda for the public API and an SQS worker, with capped concurrency so the worker cannot starve the API. EventBridge and SQS for async adjudication, with a dead letter queue. S3 and CloudFront for the site, with a private origin. CloudWatch for logs. IAM scoped to specific model ARNs rather than `bedrock:*`, with explicit denies on destroying evidence.
 
