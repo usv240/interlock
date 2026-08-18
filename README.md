@@ -213,7 +213,8 @@ Only the services this project actually runs on. An earlier draft also listed EC
 | **AWS Lambda** | The public API, which declares intents, takes commits, adjudicates and enforces the spend ceiling. Function URL, no API Gateway. A second Lambda runs the async worker with capped concurrency, so the worker cannot starve the API. |
 | **Amazon EventBridge and SQS** | Async adjudication driven off a CockroachDB changefeed, with a dead letter queue and partial batch failure handling. |
 | **Amazon S3 and CloudFront** | Hosts the demo as a static export with a private origin. CloudFront only read via Origin Access Control, no public bucket policy. |
-| **Amazon CloudWatch** | A $20 budget alarm with three thresholds, plus the logs that caught a cold start syntax failure and a cross region IAM denial during the build. |
+| **Amazon CloudWatch** | The logs, which caught a cold start syntax failure and a cross region IAM denial during the build. |
+| **AWS Budgets** | A $20 monthly cap on the account, alerting at 50%, 80% and 100%. Alert-only by design: the enforcement that actually stops spending is in the API handler, since Budgets can only email. |
 | **AWS IAM** | The runtime role is scoped to nine specific model and inference profile ARNs rather than `bedrock:*`, with explicit denies on deleting evidence and altering model access. Nine rather than two because a `us.` inference profile dispatches across regions, so least privilege means naming the underlying model in every region it may route to. See [`infra/`](infra/). |
 
 ### One cross region IAM lesson worth recording

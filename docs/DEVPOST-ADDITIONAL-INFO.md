@@ -80,7 +80,7 @@ ccloud CLI, Agent Skills Repo.
 Select **Amazon Bedrock**, **AWS Lambda**, **Amazon S3**, and **Other AWS service**.
 
 If it asks you to name the others: Amazon EventBridge, Amazon SQS, Amazon
-CloudFront, Amazon CloudWatch, AWS IAM.
+CloudFront, Amazon CloudWatch, AWS Budgets, AWS IAM.
 
 Do **not** tick Amazon ECS / EKS. I designed for Fargate and never wired it up.
 
@@ -191,10 +191,13 @@ Amazon S3 and CloudFront.
 The demo site is a static export on a private S3 origin, readable only by
 CloudFront through Origin Access Control. No public bucket policy.
 
-Amazon CloudWatch and AWS IAM.
-CloudWatch carries a budget alarm with three thresholds, and its logs caught
-two real bugs during the build: a cold start syntax failure, and a cross region
-IAM denial. The runtime IAM role is scoped to nine specific model and inference
+Amazon CloudWatch, AWS Budgets and AWS IAM.
+CloudWatch logs caught two real bugs during the build: a cold start syntax
+failure and a cross region IAM denial. AWS Budgets holds a $20 monthly cap on
+the account, alerting at 50%, 80% and 100%. That is alert only by design,
+because Budgets can only send email: the enforcement that actually refuses to
+spend lives in the API handler, ahead of every Bedrock call.
+The runtime IAM role is scoped to nine specific model and inference
 profile ARNs rather than bedrock:*, with explicit denies on deleting evidence or
 altering model access. That cross region denial is worth passing on to other
 entrants, and it is why the list is nine rather than two:
