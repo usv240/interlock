@@ -142,28 +142,34 @@ sequenceDiagram
 flowchart TB
     subgraph yours["Your side · we never see your reasoning"]
         direction LR
-        AGENT["Your agent<br/>your models and prompts"] --> SDK["INTERLOCK SDK<br/>client or LangChain callback"]
+        AGENT["Your agent<br/>your models, prompts, tools"] --> SDK["INTERLOCK SDK<br/>client or LangChain callback"]
     end
 
     subgraph aws["AWS"]
         direction LR
-        API["Lambda · public API"]
-        BEDROCK["Bedrock<br/>Titan embeddings<br/>Claude adjudication<br/><i>only when the graph cannot rule</i>"]
-        ASYNC["EventBridge · SQS · worker Lambda"]
+        API["Lambda · public API<br/>function URL, no API Gateway"]
+        BEDROCK["Bedrock<br/>Titan embeddings · Claude<br/><i>only when the graph cannot rule</i>"]
+        QUEUE["EventBridge · SQS<br/>dead letter queue"]
+        WORKER["Lambda · worker<br/>capped at 20 concurrent"]
+        SITE["S3 · CloudFront<br/>demo site, private origin"]
+        GUARD["Guardrails<br/>AWS Budgets $20 · IAM, 9 model ARNs"]
     end
 
-    subgraph crdb["CockroachDB · 3 regions · SERIALIZABLE"]
+    subgraph crdb["CockroachDB · 3 regions · SURVIVE REGION FAILURE · SERIALIZABLE"]
         direction LR
-        MEM["intent + resource<br/>plan, read set, embedding"] --> DETECT["who is threatened<br/>exact + graph + vector"]
+        MEM["intent + resource<br/>plan, read set, embedding, versions"] --> DETECT["who is threatened<br/>exact + graph + vector, one query"]
         DETECT --> TIME["AS OF SYSTEM TIME<br/>replay the agent's snapshot"]
-        TIME --> ADJ["adjudication<br/>exactly once"]
+        TIME --> ADJ["adjudication<br/>exactly once, UNIQUE index"]
     end
 
     SDK --> API
     API --> MEM
     API --> BEDROCK
-    MEM -->|changefeed| ASYNC
-    ASYNC --> ADJ
+    MEM -->|changefeed| QUEUE
+    QUEUE --> WORKER
+    WORKER --> BEDROCK
+    WORKER --> ADJ
+    SITE -.-> API
 ```
 
 ---
